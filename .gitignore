@@ -1,0 +1,73 @@
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.Python
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage
+.pytest_cache/
+coverage.xml
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDEs and editors
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment variables / secrets
+.env
+.env.*
+secrets.json
+*.pem
+*.key
+
+# Logs and temp
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Data, databases, vector stores and caches
+vector_db/
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Model weights / embeddings / caches
+*.pt
+*.bin
+embeddings/
+models/
+
+# Misc
+*.pyc
+
+# Optional: if you have local notebooks or large sample files
+# samples/
+# notebooks/
