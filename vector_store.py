@@ -48,7 +48,16 @@ class VectorStore:
         TODO: 使用OpenAI API获取文本的embedding向量
 
         """
-        pass
+        # 移除换行符以获得更好的embedding效果
+        text = text.replace("\n", " ")
+        try:
+            response = self.client.embeddings.create(
+                input=[text], model=OPENAI_EMBEDDING_MODEL
+            )
+            return response.data[0].embedding
+        except Exception as e:
+            print(f"获取Embedding失败: {e}")
+            return []
 
     def add_documents(self, chunks: List[Dict[str, str]]) -> None:
         """添加文档块到向量数据库
@@ -59,7 +68,57 @@ class VectorStore:
         3. 获取文档块元数据
         5. 打印添加进度
         """
-        pass
+        ids = []
+        documents = []
+        metadatas = []
+        embeddings = []
+
+        print(f"正在处理 {len(chunks)} 个文档块...")
+
+        for chunk in tqdm(chunks, desc="生成向量并准备数据"):
+            content = chunk.get("content", "")
+            if not content:
+                continue
+
+            # 1. 获取Embedding
+            embedding = self.get_embedding(content)
+            if not embedding:
+                continue
+
+            # 2. 生成唯一ID (文件名_页码_块ID)
+            # PDF/PPT: chunk_id为0，依靠page_number区分
+            # DOCX/TXT: page_number为0，依靠chunk_id区分
+            filename = chunk.get("filename", "unknown")
+            chunk_id = chunk.get("chunk_id", 0)
+            page_number = chunk.get("page_number", 0)
+            uid = f"{filename}_p{page_number}_c{chunk_id}"
+
+            # 3. 准备元数据 (过滤掉复杂对象)
+            meta = {
+                "filename": filename,
+                "filepath": chunk.get("filepath", ""),
+                "filetype": chunk.get("filetype", ""),
+                "page_number": chunk.get("page_number", 0),
+                "chunk_id": chunk_id,
+            }
+
+            ids.append(uid)
+            documents.append(content)
+            embeddings.append(embedding)
+            metadatas.append(meta)
+
+        # 批量添加到ChromaDB
+        if ids:
+            try:
+                self.collection.add(
+                    documents=documents,
+                    embeddings=embeddings,
+                    metadatas=metadatas,
+                    ids=ids,
+                )
+                print(f"成功添加 {len(ids)} 个文档块到向量数据库")
+            except Exception as e:
+                print(f"添加文档到向量数据库失败: {e}")
 
     def search(self, query: str, top_k: int = TOP_K) -> List[Dict]:
         """搜索相关文档
@@ -73,8 +132,39 @@ class VectorStore:
            - metadata: 元数据（文件名、页码等）
         4. 返回格式化的结果列表
         """
+        # 1. 获取查询文本的embedding
+        query_embedding = self.get_embedding(query)
+        if not query_embedding:
+            return []
 
-        pass
+        # 2. 搜索
+        try:
+            results = self.collection.query(
+                query_embeddings=[query_embedding], n_results=top_k
+            )
+
+            # 3. 格式化结果
+            formatted_results = []
+            if results["documents"]:
+                # Chroma返回的是列表的列表
+                docs = results["documents"][0]
+                metas = results["metadatas"][0]
+                distances = results["distances"][0] if results["distances"] else []
+
+                for i in range(len(docs)):
+                    formatted_results.append(
+                        {
+                            "content": docs[i],
+                            "metadata": metas[i],
+                            "score": distances[i] if i < len(distances) else 0.0,
+                        }
+                    )
+
+            return formatted_results
+
+        except Exception as e:
+            print(f"搜索失败: {e}")
+            return []
 
     def clear_collection(self) -> None:
         """清空collection"""

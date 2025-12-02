@@ -9,7 +9,7 @@ DATA_DIR = "./data"
 
 # 向量数据库配置
 VECTOR_DB_PATH = "./vector_db"
-COLLECTION_NAME = ""
+COLLECTION_NAME = "nlp_course_rag"
 
 # 文本处理配置
 CHUNK_SIZE = 500
@@ -17,4 +17,4 @@ CHUNK_OVERLAP = 50
 MAX_TOKENS = 4096
 
 # RAG配置
-TOP_K = ""
+TOP_K = 3
