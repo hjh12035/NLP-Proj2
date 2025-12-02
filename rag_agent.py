@@ -53,7 +53,30 @@ class RAGAgent:
         3. 每个检索结果需要包含来源信息（文件名和页码）
         4. 返回格式化的上下文字符串和原始检索结果列表
         """
-        pass
+        # 1. 使用向量数据库检索相关文档
+        retrieved_docs = self.vector_store.search(query, top_k=top_k)
+
+        if not retrieved_docs:
+            return "", []
+
+        # 2. 格式化检索结果，构建上下文字符串
+        context_parts = []
+        for i, doc in enumerate(retrieved_docs, 1):
+            content = doc.get("content", "").strip()
+            metadata = doc.get("metadata", {})
+            filename = metadata.get("filename", "未知文件")
+            page_number = metadata.get("page_number", 0)
+
+            # 3. 每个检索结果需要包含来源信息（文件名和页码）
+            source_info = f"来源: {filename}"
+            if page_number > 0:
+                source_info += f" (第 {page_number} 页)"
+
+            context_parts.append(f"文档片段 {i}:\n{content}\n[{source_info}]")
+
+        # 4. 返回格式化的上下文字符串和原始检索结果列表
+        context_str = "\n\n".join(context_parts)
+        return context_str, retrieved_docs
 
     def generate_response(
         self,
@@ -81,7 +104,15 @@ class RAGAgent:
         3. 包含来源信息（文件名和页码）
         4. 返回用户提示词
         """
-        user_text = """"""
+        user_text = f"""
+        请基于以下课程资料回答学生的问题。如果资料中没有相关信息，请明确说明。
+
+        ---课程资料开始---
+        {context}
+        ---课程资料结束---
+
+        学生问题: {query}
+        """
 
         messages.append({"role": "user", "content": user_text})
 
