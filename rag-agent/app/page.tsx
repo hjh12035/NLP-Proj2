@@ -135,11 +135,15 @@ export default function Home() {
             <div
               className={`max-w-[80%] rounded-lg p-3 ${
                 msg.role === "user"
-                  ? "bg-blue-500 text-white"
+                  ? "text-gray-800"
                   : "bg-white text-gray-800 shadow"
               }`}
+              style={{
+                backgroundColor:
+                  msg.role === "user" ? "rgba(162, 205, 190, 0.78)" : undefined,
+              }}
             >
-              <div className="prose prose-sm max-w-none dark:prose-invert break-words">
+              <div className="prose max-w-none dark:prose-invert break-words text-base">
                 <ReactMarkdown
                   remarkPlugins={[remarkMath, remarkGfm]}
                   rehypePlugins={[rehypeKatex]}
