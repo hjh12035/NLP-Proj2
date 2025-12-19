@@ -165,28 +165,33 @@ export default function Home() {
       </main>
 
       {/* Input Area */}
-      <footer className="bg-white p-4 border-t">
-        <form onSubmit={handleSubmit} className="flex gap-2">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="请输入您的问题..."
-            className="flex-1 border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
-            disabled={isLoading}
-          />
-          <button
-            type="submit"
-            disabled={isLoading || !input.trim()}
-            className={`px-6 py-2 rounded-lg text-white font-medium transition-colors ${
-              isLoading || !input.trim()
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-green-600 hover:bg-green-700"
-            }`}
+      <footer className="p-4 pb-6">
+        <div className="max-w-4xl mx-auto">
+          <form
+            onSubmit={handleSubmit}
+            className="flex gap-2 bg-white p-2 rounded-2xl shadow-xl border border-gray-100"
           >
-            发送
-          </button>
-        </form>
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="请输入您的问题..."
+              className="flex-1 border-none focus:ring-0 px-4 py-2 text-black bg-transparent focus:outline-none"
+              disabled={isLoading}
+            />
+            <button
+              type="submit"
+              disabled={isLoading || !input.trim()}
+              className={`px-6 py-2 rounded-xl text-white font-medium transition-colors ${
+                isLoading || !input.trim()
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-green-600 hover:bg-green-700"
+              }`}
+            >
+              发送
+            </button>
+          </form>
+        </div>
       </footer>
     </div>
   );
