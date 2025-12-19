@@ -4,6 +4,8 @@ from pydantic import BaseModel
 from typing import List, Dict, Optional
 import uvicorn
 import os
+import json
+import re
 from rag_agent import RAGAgent
 from process_data import main as build_kb_main
 from config import MODEL_NAME, VECTOR_DB_PATH
@@ -80,6 +82,39 @@ async def chat(request: ChatRequest):
         return ChatResponse(answer=answer)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"生成回答失败: {str(e)}")
+
+
+class QuizRequest(BaseModel):
+    topic: str
+    difficulty: str
+    type: str
+
+
+@app.post("/quiz")
+async def generate_quiz(request: QuizRequest):
+    global rag_agent
+    if not rag_agent:
+        raise HTTPException(status_code=503, detail="Agent not initialized")
+
+    try:
+        quiz_json = rag_agent.generate_quiz(
+            topic=request.topic,
+            difficulty=request.difficulty,
+            question_type=request.type,
+        )
+        # Try to parse it to ensure it's valid JSON before returning
+        try:
+            return json.loads(quiz_json)
+        except json.JSONDecodeError:
+            # If strict JSON fails, try to find JSON block
+            match = re.search(r"\{.*\}", quiz_json, re.DOTALL)
+            if match:
+                return json.loads(match.group(0))
+            else:
+                return {"error": "Failed to parse quiz JSON", "raw": quiz_json}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

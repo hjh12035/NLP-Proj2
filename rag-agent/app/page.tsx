@@ -6,11 +6,21 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import "katex/dist/katex.min.css";
-import { MessageSquare, BookOpen, FileText, Settings, Database, GraduationCap } from "lucide-react";
+import { MessageSquare, BookOpen, FileText, Settings, Database, GraduationCap, ChevronDown, ChevronUp } from "lucide-react";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
+}
+
+interface QuizQuestion {
+  id: number;
+  type: string;
+  question: string;
+  options?: string[];
+  answer: string;
+  explanation: string;
+  source: string;
 }
 
 const preprocessLaTeX = (content: string) => {
@@ -29,6 +39,14 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isBuilding, setIsBuilding] = useState(false);
+  
+  // Quiz State
+  const [quizTopic, setQuizTopic] = useState("");
+  const [quizDifficulty, setQuizDifficulty] = useState("简单");
+  const [quizType, setQuizType] = useState("选择题");
+  const [quizResults, setQuizResults] = useState<QuizQuestion[]>([]);
+  const [isQuizLoading, setIsQuizLoading] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -101,6 +119,42 @@ export default function Home() {
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleQuizSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quizTopic.trim() || isQuizLoading) return;
+
+    setIsQuizLoading(true);
+    setQuizResults([]); // Clear previous results
+
+    try {
+      const response = await fetch("http://localhost:8000/quiz", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: quizTopic,
+          difficulty: quizDifficulty,
+          type: quizType,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate quiz");
+      }
+
+      const data = await response.json();
+      if (data.questions) {
+        setQuizResults(data.questions);
+      } else {
+        alert("生成格式有误，请重试");
+      }
+    } catch (error) {
+      console.error("Error generating quiz:", error);
+      alert("生成测验失败，请稍后重试");
+    } finally {
+      setIsQuizLoading(false);
     }
   };
 
@@ -289,11 +343,96 @@ export default function Home() {
         )}
 
         {activeTab === "quiz" && (
-          <div className="flex-1 flex items-center justify-center text-gray-500">
-            <div className="text-center">
-              <FileText className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-              <p className="text-lg">测验生成功能开发中...</p>
+          <div className="flex-1 flex flex-col h-full bg-gray-50">
+            <header className="bg-white shadow-sm p-4 border-b">
+              <h2 className="text-lg font-semibold text-gray-800">生成测验</h2>
+            </header>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              {/* Results Area */}
+              {quizResults.length > 0 ? (
+                <div className="max-w-3xl mx-auto space-y-6 pb-20">
+                  {quizResults.map((q) => (
+                    <QuizCard key={q.id} question={q} />
+                  ))}
+                  <div className="text-center pt-8 pb-4">
+                    <button
+                      onClick={() => setQuizResults([])}
+                      className="text-blue-600 hover:underline"
+                    >
+                      生成新测验
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                  {!isQuizLoading && (
+                    <div className="text-center max-w-md">
+                      <FileText className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                      <p className="text-lg mb-2">输入考点，生成定制化练习题</p>
+                      <p className="text-sm text-gray-400">
+                        支持选择题和简答题，自动匹配课程难度
+                      </p>
+                    </div>
+                  )}
+                  {isQuizLoading && (
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                      <p className="text-gray-500">正在生成题目...</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
+
+            {/* Input Area (Only show if no results or loading) */}
+            {quizResults.length === 0 && !isQuizLoading && (
+              <div className="p-6 bg-white border-t">
+                <div className="max-w-4xl mx-auto">
+                  <form onSubmit={handleQuizSubmit} className="space-y-4">
+                    <div className="flex gap-4">
+                      <select
+                        value={quizDifficulty}
+                        onChange={(e) => setQuizDifficulty(e.target.value)}
+                        className="px-4 py-2 rounded-xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
+                      >
+                        <option value="简单">简单</option>
+                        <option value="困难">困难</option>
+                      </select>
+                      <select
+                        value={quizType}
+                        onChange={(e) => setQuizType(e.target.value)}
+                        className="px-4 py-2 rounded-xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
+                      >
+                        <option value="选择题">选择题</option>
+                        <option value="简答题">简答题</option>
+                      </select>
+                    </div>
+
+                    <div className="flex gap-2 bg-gray-50 p-2 rounded-2xl border border-gray-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
+                      <input
+                        type="text"
+                        value={quizTopic}
+                        onChange={(e) => setQuizTopic(e.target.value)}
+                        placeholder="请输入预期考点（例如：Transformer架构、注意力机制）..."
+                        className="flex-1 border-none focus:ring-0 px-4 py-2 text-gray-800 bg-transparent focus:outline-none"
+                      />
+                      <button
+                        type="submit"
+                        disabled={!quizTopic.trim()}
+                        className={`px-6 py-2 rounded-xl text-white font-medium transition-colors ${
+                          !quizTopic.trim()
+                            ? "bg-gray-300 cursor-not-allowed"
+                            : "bg-blue-600 hover:bg-blue-700"
+                        }`}
+                      >
+                        生成题目
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -318,4 +457,80 @@ export default function Home() {
     </div>
   );
 }
+
+function QuizCard({ question }: { question: QuizQuestion }) {
+  const [showAnswer, setShowAnswer] = useState(false);
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden transition-all hover:shadow-md">
+      <div className="p-6">
+        <div className="flex justify-between items-start mb-4">
+          <span className="inline-block px-3 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-600">
+            {question.type}
+          </span>
+          <span className="text-xs text-gray-400">{question.source}</span>
+        </div>
+
+        <h3 className="text-lg font-medium text-gray-900 mb-4">
+          {question.question}
+        </h3>
+
+        {question.options && question.options.length > 0 && (
+          <div className="space-y-2 mb-6">
+            {question.options.map((opt, idx) => (
+              <div
+                key={idx}
+                className="p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors text-gray-700"
+              >
+                {opt}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex justify-end">
+          <button
+            onClick={() => setShowAnswer(!showAnswer)}
+            className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
+          >
+            {showAnswer ? (
+              <>
+                <span>收起解析</span>
+                <ChevronUp className="w-4 h-4" />
+              </>
+            ) : (
+              <>
+                <span>查看解析</span>
+                <ChevronDown className="w-4 h-4" />
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Answer Section with Animation */}
+      <div
+        className={`bg-blue-50/50 border-t border-blue-100 transition-all duration-300 ease-in-out overflow-hidden ${
+          showAnswer ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
+        }`}
+      >
+        <div className="p-6 space-y-3">
+          <div>
+            <span className="font-semibold text-gray-900">正确答案：</span>
+            <span className="text-blue-700">{question.answer}</span>
+          </div>
+          <div>
+            <span className="font-semibold text-gray-900 block mb-1">
+              解析：
+            </span>
+            <p className="text-gray-700 text-sm leading-relaxed">
+              {question.explanation}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
