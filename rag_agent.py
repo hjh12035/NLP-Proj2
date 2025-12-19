@@ -193,6 +193,75 @@ class RAGAgent:
             except Exception as inner_e:
                 return f'{{"error": "{str(inner_e)}"}}'
 
+    def generate_outline(self, topic: str = "") -> str:
+        """生成复习提纲"""
+
+        # 1. Determine query for context retrieval
+        search_query = topic if topic else "课程大纲 核心知识点 总结"
+
+        # 2. Retrieve context
+        context, _ = self.retrieve_context(search_query, top_k=5)
+
+        outline_system_prompt = """
+        你是一个专业的课程助教。请根据提供的课程资料和用户的主题（如果有），生成一个结构化的复习提纲。
+        
+        必须严格按照以下 JSON 格式返回结果，不要包含任何 Markdown 格式标记：
+        {
+            "title": "提纲主题",
+            "children": [
+                {
+                    "title": "一级知识点",
+                    "children": [
+                        {
+                            "title": "二级知识点",
+                            "children": [] (可选)
+                        }
+                    ]
+                }
+            ]
+        }
+        
+        要求：
+        1. 结构清晰，层级分明。
+        2. 知识点覆盖全面但精炼。
+        3. 如果用户未提供主题，则生成整个课程的复习大纲。
+        """
+
+        user_prompt_text = (
+            f"请生成关于 '{topic}' 的复习提纲。"
+            if topic
+            else "请生成本课程的完整复习提纲。"
+        )
+
+        user_prompt = f"""
+        {user_prompt_text}
+        
+        参考资料：
+        {context}
+        """
+
+        messages = [
+            {"role": "system", "content": outline_system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=0.5,  # Lower temperature for more structured output
+                response_format={"type": "json_object"},
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model, messages=messages, temperature=0.5
+                )
+                return response.choices[0].message.content
+            except Exception as inner_e:
+                return f'{{"error": "{str(inner_e)}"}}'
+
     def answer_question(
         self, query: str, chat_history: Optional[List[Dict]] = None, top_k: int = TOP_K
     ) -> Dict[str, any]:
