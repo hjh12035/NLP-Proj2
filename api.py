@@ -119,5 +119,30 @@ async def generate_quiz(request: QuizRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class OutlineRequest(BaseModel):
+    topic: Optional[str] = ""
+
+
+@app.post("/outline")
+async def generate_outline(request: OutlineRequest):
+    global rag_agent
+    if not rag_agent:
+        raise HTTPException(status_code=503, detail="Agent not initialized")
+
+    try:
+        outline_json = rag_agent.generate_outline(topic=request.topic)
+
+        try:
+            return json.loads(outline_json)
+        except json.JSONDecodeError:
+            match = re.search(r"\{.*\}", outline_json, re.DOTALL)
+            if match:
+                return json.loads(match.group(0))
+            else:
+                return {"error": "Failed to parse outline JSON", "raw": outline_json}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

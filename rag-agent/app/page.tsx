@@ -6,7 +6,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import "katex/dist/katex.min.css";
-import { MessageSquare, BookOpen, FileText, Settings, Database, GraduationCap, ChevronDown, ChevronUp } from "lucide-react";
+import { MessageSquare, BookOpen, FileText, Settings, Database, GraduationCap, ChevronDown, ChevronUp, ChevronRight, Circle } from "lucide-react";
 
 interface Message {
   role: "user" | "assistant";
@@ -21,6 +21,11 @@ interface QuizQuestion {
   answer: string;
   explanation: string;
   source: string;
+}
+
+interface OutlineNode {
+  title: string;
+  children?: OutlineNode[];
 }
 
 const preprocessLaTeX = (content: string) => {
@@ -47,6 +52,11 @@ export default function Home() {
   const [quizNum, setQuizNum] = useState(1);
   const [quizResults, setQuizResults] = useState<QuizQuestion[]>([]);
   const [isQuizLoading, setIsQuizLoading] = useState(false);
+
+  // Outline State
+  const [outlineTopic, setOutlineTopic] = useState("");
+  const [outlineData, setOutlineData] = useState<OutlineNode | null>(null);
+  const [isOutlineLoading, setIsOutlineLoading] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -160,6 +170,36 @@ export default function Home() {
     }
   };
 
+  const handleOutlineSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isOutlineLoading) return;
+
+    setIsOutlineLoading(true);
+    setOutlineData(null);
+
+    try {
+      const response = await fetch("http://localhost:8000/outline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: outlineTopic,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate outline");
+      }
+
+      const data = await response.json();
+      setOutlineData(data);
+    } catch (error) {
+      console.error("Error generating outline:", error);
+      alert("生成提纲失败，请稍后重试");
+    } finally {
+      setIsOutlineLoading(false);
+    }
+  };
+
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Sidebar */}
@@ -262,8 +302,8 @@ export default function Home() {
             
             <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
               {messages.length === 0 && (
-                <div className="text-center text-gray-500 mt-20">
-                  <div className="bg-white p-8 rounded-2xl shadow-sm inline-block max-w-md">
+                <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                  <div className="bg-white p-8 rounded-2xl shadow-sm inline-block max-w-md text-center">
                     <MessageSquare className="w-12 h-12 mx-auto text-blue-500 mb-4" />
                     <h3 className="text-lg font-medium text-gray-900 mb-2">欢迎使用智能助教</h3>
                     <p>您可以询问关于课程的任何问题，或者让我也为您生成复习大纲。</p>
@@ -369,10 +409,10 @@ export default function Home() {
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-gray-500">
                   {!isQuizLoading && (
-                    <div className="text-center max-w-md">
-                      <FileText className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-                      <p className="text-lg mb-2">输入考点，生成定制化练习题</p>
-                      <p className="text-sm text-gray-400">
+                    <div className="bg-white p-8 rounded-2xl shadow-sm inline-block max-w-md text-center">
+                      <FileText className="w-12 h-12 mx-auto text-blue-500 mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">输入考点，生成定制化练习题</h3>
+                      <p className="text-gray-500">
                         支持选择题和简答题，自动匹配课程难度
                       </p>
                     </div>
@@ -450,11 +490,75 @@ export default function Home() {
         )}
 
         {activeTab === "outline" && (
-          <div className="flex-1 flex items-center justify-center text-gray-500">
-            <div className="text-center">
-              <BookOpen className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-              <p className="text-lg">课程大纲功能开发中...</p>
+          <div className="flex-1 flex flex-col h-full bg-gray-50">
+            <header className="bg-white shadow-sm p-4 border-b">
+              <h2 className="text-lg font-semibold text-gray-800">复习提纲</h2>
+            </header>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              {outlineData ? (
+                <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+                  <h1 className="text-2xl font-bold text-gray-900 mb-6 text-center border-b pb-4">
+                    {outlineData.title}
+                  </h1>
+                  <div className="space-y-2">
+                    {outlineData.children?.map((child, idx) => (
+                      <OutlineTreeItem key={idx} node={child} level={0} />
+                    ))}
+                  </div>
+                  <div className="mt-8 text-center">
+                    <button
+                      onClick={() => setOutlineData(null)}
+                      className="text-blue-600 hover:underline text-sm"
+                    >
+                      重新生成
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                  {!isOutlineLoading && (
+                    <div className="bg-white p-8 rounded-2xl shadow-sm inline-block max-w-md text-center">
+                      <BookOpen className="w-12 h-12 mx-auto text-blue-500 mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">生成结构化复习提纲</h3>
+                      <p className="text-gray-500">
+                        输入特定主题，或直接点击生成获取全课程大纲
+                      </p>
+                    </div>
+                  )}
+                  {isOutlineLoading && (
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                      <p className="text-gray-500">正在梳理知识点...</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
+
+            {!outlineData && !isOutlineLoading && (
+              <div className="p-6 bg-white border-t">
+                <div className="max-w-4xl mx-auto">
+                  <form onSubmit={handleOutlineSubmit}>
+                    <div className="flex gap-2 bg-gray-50 p-2 rounded-2xl border border-gray-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
+                      <input
+                        type="text"
+                        value={outlineTopic}
+                        onChange={(e) => setOutlineTopic(e.target.value)}
+                        placeholder="请输入复习主题（留空则生成全课程大纲）..."
+                        className="flex-1 border-none focus:ring-0 px-4 py-2 text-gray-800 bg-transparent focus:outline-none"
+                      />
+                      <button
+                        type="submit"
+                        className="px-6 py-2 rounded-xl text-white font-medium transition-colors bg-blue-600 hover:bg-blue-700"
+                      >
+                        生成提纲
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -467,6 +571,55 @@ export default function Home() {
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+function OutlineTreeItem({ node, level }: { node: OutlineNode; level: number }) {
+  const [isOpen, setIsOpen] = useState(true);
+  const hasChildren = node.children && node.children.length > 0;
+
+  return (
+    <div className="select-none">
+      <div
+        className={`flex items-center gap-2 py-2 px-2 rounded-lg cursor-pointer transition-colors ${
+          level === 0 ? "hover:bg-gray-50" : "hover:bg-gray-50"
+        }`}
+        style={{ paddingLeft: `${level * 1.5 + 0.5}rem` }}
+        onClick={() => hasChildren && setIsOpen(!isOpen)}
+      >
+        {hasChildren ? (
+          <div className="text-gray-400 hover:text-gray-600">
+            {isOpen ? (
+              <ChevronDown className="w-4 h-4" />
+            ) : (
+              <ChevronRight className="w-4 h-4" />
+            )}
+          </div>
+        ) : (
+          <Circle className="w-2 h-2 text-gray-300 ml-1" />
+        )}
+        
+        <span
+          className={`${
+            level === 0
+              ? "font-semibold text-gray-800 text-lg"
+              : level === 1
+              ? "font-medium text-gray-700"
+              : "text-gray-600"
+          }`}
+        >
+          {node.title}
+        </span>
+      </div>
+
+      {hasChildren && isOpen && (
+        <div className="animate-in slide-in-from-top-2 duration-200">
+          {node.children!.map((child, idx) => (
+            <OutlineTreeItem key={idx} node={child} level={level + 1} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
