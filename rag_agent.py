@@ -125,12 +125,73 @@ class RAGAgent:
 
         try:
             response = self.client.chat.completions.create(
-                model=self.model, messages=messages, temperature=0.7, max_tokens=1500, seed=1024
+                model=self.model,
+                messages=messages,
+                temperature=0.7,
+                max_tokens=1500,
+                seed=1024,
             )
 
             return response.choices[0].message.content
         except Exception as e:
             return f"生成回答时出错: {str(e)}"
+
+    def generate_quiz(
+        self, topic: str, difficulty: str, question_type: str, num_questions: int = 1
+    ) -> str:
+        """生成测验题目"""
+
+        # 1. 检索相关上下文
+        context, _ = self.retrieve_context(topic, top_k=3)
+
+        quiz_system_prompt = """
+        你是一个专业的课程出题助手。请根据提供的课程资料（如果有）和用户的主题要求，生成测验题目。
+        
+        必须严格按照以下 JSON 格式返回结果，不要包含任何 Markdown 格式标记（如 ```json ... ```）：
+        {
+            "questions": [
+                {
+                    "id": 1,
+                    "type": "选择题" 或 "简答题",
+                    "question": "题目内容",
+                    "options": ["选项A", "选项B", "选项C", "选项D"] (如果是简答题则为空列表),
+                    "answer": "参考答案",
+                    "explanation": "答案解析",
+                    "source": "参考资料来源（如：文档X 第Y页）"
+                }
+            ]
+        }
+        """
+
+        user_prompt = f"""
+        请生成 {num_questions} 道关于 "{topic}" 的 {difficulty} 难度的 {question_type}。
+        
+        参考资料：
+        {context}
+        """
+
+        messages = [
+            {"role": "system", "content": quiz_system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=0.7,
+                response_format={"type": "json_object"},
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            # Fallback for models that don't support response_format
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model, messages=messages, temperature=0.7
+                )
+                return response.choices[0].message.content
+            except Exception as inner_e:
+                return f'{{"error": "{str(inner_e)}"}}'
 
     def answer_question(
         self, query: str, chat_history: Optional[List[Dict]] = None, top_k: int = TOP_K
