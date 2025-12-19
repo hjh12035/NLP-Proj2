@@ -55,6 +55,7 @@ secrets.json
 # Data, databases, vector stores and caches
 vector_db/
 data/
+data_colletion/
 *.db
 *.sqlite
 *.sqlite3

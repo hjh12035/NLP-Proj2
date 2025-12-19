@@ -4,6 +4,7 @@ from typing import List, Dict
 import chromadb
 from chromadb.config import Settings
 from openai import OpenAI
+from pptx.shapes.picture import Picture
 from tqdm import tqdm
 
 from config import (
@@ -119,6 +120,16 @@ class VectorStore:
                 print(f"成功添加 {len(ids)} 个文档块到向量数据库")
             except Exception as e:
                 print(f"添加文档到向量数据库失败: {e}")
+
+    def add_pictures(self, pictures: List[Dict[str, str]]) -> None:
+        """添加图片到向量数据库
+        要求：
+        1. 遍历图片
+        2. 获取图片内容
+        3. 获取图片元数据
+        4. 打印添加进度
+        """
+
 
     def search(self, query: str, top_k: int = TOP_K) -> List[Dict]:
         """搜索相关文档
