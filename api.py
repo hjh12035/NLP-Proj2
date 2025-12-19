@@ -88,6 +88,7 @@ class QuizRequest(BaseModel):
     topic: str
     difficulty: str
     type: str
+    num_questions: int = 1
 
 
 @app.post("/quiz")
@@ -101,6 +102,7 @@ async def generate_quiz(request: QuizRequest):
             topic=request.topic,
             difficulty=request.difficulty,
             question_type=request.type,
+            num_questions=request.num_questions,
         )
         # Try to parse it to ensure it's valid JSON before returning
         try:

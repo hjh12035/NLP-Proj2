@@ -44,6 +44,7 @@ export default function Home() {
   const [quizTopic, setQuizTopic] = useState("");
   const [quizDifficulty, setQuizDifficulty] = useState("简单");
   const [quizType, setQuizType] = useState("选择题");
+  const [quizNum, setQuizNum] = useState(1);
   const [quizResults, setQuizResults] = useState<QuizQuestion[]>([]);
   const [isQuizLoading, setIsQuizLoading] = useState(false);
 
@@ -137,6 +138,7 @@ export default function Home() {
           topic: quizTopic,
           difficulty: quizDifficulty,
           type: quizType,
+          num_questions: quizNum,
         }),
       });
 
@@ -152,7 +154,7 @@ export default function Home() {
       }
     } catch (error) {
       console.error("Error generating quiz:", error);
-      alert("生成测验失败，请稍后重试");
+      alert("生成习题失败，请稍后重试");
     } finally {
       setIsQuizLoading(false);
     }
@@ -199,7 +201,7 @@ export default function Home() {
           >
             <FileText className="w-6 h-6 min-w-[1.5rem]" />
             <span className="ml-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap delay-75">
-              生成测验
+              生成习题
             </span>
           </button>
           
@@ -345,7 +347,7 @@ export default function Home() {
         {activeTab === "quiz" && (
           <div className="flex-1 flex flex-col h-full bg-gray-50">
             <header className="bg-white shadow-sm p-4 border-b">
-              <h2 className="text-lg font-semibold text-gray-800">生成测验</h2>
+              <h2 className="text-lg font-semibold text-gray-800">生成习题</h2>
             </header>
 
             <div className="flex-1 overflow-y-auto p-6">
@@ -360,7 +362,7 @@ export default function Home() {
                       onClick={() => setQuizResults([])}
                       className="text-blue-600 hover:underline"
                     >
-                      生成新测验
+                      生成新习题
                     </button>
                   </div>
                 </div>
@@ -407,6 +409,17 @@ export default function Home() {
                         <option value="选择题">选择题</option>
                         <option value="简答题">简答题</option>
                       </select>
+                      <div className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 bg-gray-50">
+                        <span className="text-gray-600 text-sm whitespace-nowrap">题目数量:</span>
+                        <input
+                          type="number"
+                          min="1"
+                          max="10"
+                          value={quizNum}
+                          onChange={(e) => setQuizNum(parseInt(e.target.value) || 1)}
+                          className="w-16 bg-transparent border-none focus:ring-0 p-0 text-gray-700"
+                        />
+                      </div>
                     </div>
 
                     <div className="flex gap-2 bg-gray-50 p-2 rounded-2xl border border-gray-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
@@ -471,18 +484,28 @@ function QuizCard({ question }: { question: QuizQuestion }) {
           <span className="text-xs text-gray-400">{question.source}</span>
         </div>
 
-        <h3 className="text-lg font-medium text-gray-900 mb-4">
-          {question.question}
-        </h3>
+        <div className="text-lg font-medium text-gray-900 mb-4 prose max-w-none">
+          <ReactMarkdown
+            remarkPlugins={[remarkMath, remarkGfm]}
+            rehypePlugins={[rehypeKatex]}
+          >
+            {preprocessLaTeX(question.question)}
+          </ReactMarkdown>
+        </div>
 
         {question.options && question.options.length > 0 && (
           <div className="space-y-2 mb-6">
             {question.options.map((opt, idx) => (
               <div
                 key={idx}
-                className="p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors text-gray-700"
+                className="p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors text-gray-700 prose max-w-none"
               >
-                {opt}
+                <ReactMarkdown
+                  remarkPlugins={[remarkMath, remarkGfm]}
+                  rehypePlugins={[rehypeKatex]}
+                >
+                  {preprocessLaTeX(opt)}
+                </ReactMarkdown>
               </div>
             ))}
           </div>
@@ -516,16 +539,28 @@ function QuizCard({ question }: { question: QuizQuestion }) {
       >
         <div className="p-6 space-y-3">
           <div>
-            <span className="font-semibold text-gray-900">正确答案：</span>
-            <span className="text-blue-700">{question.answer}</span>
+            <span className="font-semibold text-gray-900">参考答案：</span>
+            <div className="text-blue-700 prose max-w-none">
+              <ReactMarkdown
+                remarkPlugins={[remarkMath, remarkGfm]}
+                rehypePlugins={[rehypeKatex]}
+              >
+                {preprocessLaTeX(question.answer)}
+              </ReactMarkdown>
+            </div>
           </div>
           <div>
             <span className="font-semibold text-gray-900 block mb-1">
               解析：
             </span>
-            <p className="text-gray-700 text-sm leading-relaxed">
-              {question.explanation}
-            </p>
+            <div className="text-gray-700 text-sm leading-relaxed prose max-w-none">
+              <ReactMarkdown
+                remarkPlugins={[remarkMath, remarkGfm]}
+                rehypePlugins={[rehypeKatex]}
+              >
+                {preprocessLaTeX(question.explanation)}
+              </ReactMarkdown>
+            </div>
           </div>
         </div>
       </div>

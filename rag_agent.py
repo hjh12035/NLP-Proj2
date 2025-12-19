@@ -155,7 +155,7 @@ class RAGAgent:
                     "type": "选择题" 或 "简答题",
                     "question": "题目内容",
                     "options": ["选项A", "选项B", "选项C", "选项D"] (如果是简答题则为空列表),
-                    "answer": "正确答案",
+                    "answer": "参考答案",
                     "explanation": "答案解析",
                     "source": "参考资料来源（如：文档X 第Y页）"
                 }
