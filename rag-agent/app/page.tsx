@@ -108,7 +108,7 @@ export default function Home() {
     <div className="flex h-screen bg-gray-100">
       {/* Sidebar */}
       <aside 
-        className="w-20 hover:w-64 transition-all duration-300 ease-in-out text-white flex flex-col group overflow-hidden z-20 shadow-xl"
+        className="w-20 hover:w-48 transition-all duration-300 ease-in-out text-white flex flex-col group overflow-hidden z-20 shadow-xl"
         style={{ backgroundColor: "#2F3E46" }}
       >
         <div className="h-20 flex items-center pl-6 shrink-0">
