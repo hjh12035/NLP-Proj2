@@ -5,8 +5,8 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 First, run the development server:
 
 ```bash
-# $env:HTTP_PROXY="http://localhost:7897"
-# $env:HTTPS_PROXY="http://localhost:7897"
+$env:HTTP_PROXY="http://localhost:7897"
+$env:HTTPS_PROXY="http://localhost:7897"
 npm run dev
 # or
 yarn dev
