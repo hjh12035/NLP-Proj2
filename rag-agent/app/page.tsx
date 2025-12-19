@@ -1,11 +1,24 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import remarkGfm from "remark-gfm";
+import "katex/dist/katex.min.css";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
 }
+
+const preprocessLaTeX = (content: string) => {
+  // Replace block math \[ ... \] with $$ ... $$
+  const blockReplaced = content.replace(/\\\[([\s\S]*?)\\\]/g, (_, equation) => `$$${equation}$$`);
+  // Replace inline math \( ... \) with $ ... $
+  const inlineReplaced = blockReplaced.replace(/\\\(([\s\S]*?)\\\)/g, (_, equation) => `$${equation}$`);
+  return inlineReplaced;
+};
 
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -120,13 +133,20 @@ export default function Home() {
             }`}
           >
             <div
-              className={`max-w-[80%] rounded-lg p-3 whitespace-pre-wrap ${
+              className={`max-w-[80%] rounded-lg p-3 ${
                 msg.role === "user"
                   ? "bg-blue-500 text-white"
                   : "bg-white text-gray-800 shadow"
               }`}
             >
-              {msg.content}
+              <div className="prose prose-sm max-w-none dark:prose-invert break-words">
+                <ReactMarkdown
+                  remarkPlugins={[remarkMath, remarkGfm]}
+                  rehypePlugins={[rehypeKatex]}
+                >
+                  {preprocessLaTeX(msg.content)}
+                </ReactMarkdown>
+              </div>
             </div>
           </div>
         ))}
