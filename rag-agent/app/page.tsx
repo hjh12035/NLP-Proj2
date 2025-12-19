@@ -6,7 +6,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import "katex/dist/katex.min.css";
-import { MessageSquare, BookOpen, FileText, Settings, Database } from "lucide-react";
+import { MessageSquare, BookOpen, FileText, Settings, Database, GraduationCap } from "lucide-react";
 
 interface Message {
   role: "user" | "assistant";
@@ -107,68 +107,91 @@ export default function Home() {
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Sidebar */}
-      <aside className="w-64 bg-gray-900 text-white flex flex-col">
-        <div className="p-6">
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            <BookOpen className="w-6 h-6" />
-            <span>EduAgent</span>
+      <aside 
+        className="w-20 hover:w-64 transition-all duration-300 ease-in-out text-white flex flex-col group overflow-hidden z-20 shadow-xl"
+        style={{ backgroundColor: "#2F3E46" }}
+      >
+        <div className="h-20 flex items-center pl-6 shrink-0">
+          <h1 className="text-xl font-bold flex items-center gap-4">
+            <GraduationCap className="w-8 h-8 min-w-[2rem] text-emerald-400" />
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap delay-75">
+              EduAgent
+            </span>
           </h1>
         </div>
         
-        <nav className="flex-1 px-4 space-y-2">
+        <nav className="flex-1 px-3 space-y-2 mt-4">
           <button
             onClick={() => setActiveTab("chat")}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-              activeTab === "chat" ? "bg-blue-600 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white"
+            className={`w-full flex items-center h-12 px-4 rounded-xl transition-all duration-200 ${
+              activeTab === "chat" 
+                ? "bg-white/10 text-white shadow-sm" 
+                : "text-gray-300 hover:bg-white/5 hover:text-white"
             }`}
           >
-            <MessageSquare className="w-5 h-5" />
-            <span>智能问答</span>
+            <MessageSquare className="w-6 h-6 min-w-[1.5rem]" />
+            <span className="ml-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap delay-75">
+              智能问答
+            </span>
           </button>
           
           <button
             onClick={() => setActiveTab("quiz")}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-              activeTab === "quiz" ? "bg-blue-600 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white"
+            className={`w-full flex items-center h-12 px-4 rounded-xl transition-all duration-200 ${
+              activeTab === "quiz" 
+                ? "bg-white/10 text-white shadow-sm" 
+                : "text-gray-300 hover:bg-white/5 hover:text-white"
             }`}
           >
-            <FileText className="w-5 h-5" />
-            <span>生成测验</span>
+            <FileText className="w-6 h-6 min-w-[1.5rem]" />
+            <span className="ml-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap delay-75">
+              生成测验
+            </span>
           </button>
           
           <button
             onClick={() => setActiveTab("outline")}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-              activeTab === "outline" ? "bg-blue-600 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white"
+            className={`w-full flex items-center h-12 px-4 rounded-xl transition-all duration-200 ${
+              activeTab === "outline" 
+                ? "bg-white/10 text-white shadow-sm" 
+                : "text-gray-300 hover:bg-white/5 hover:text-white"
             }`}
           >
-            <BookOpen className="w-5 h-5" />
-            <span>课程大纲</span>
+            <BookOpen className="w-6 h-6 min-w-[1.5rem]" />
+            <span className="ml-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap delay-75">
+              复习提纲
+            </span>
           </button>
         </nav>
 
-        <div className="p-4 border-t border-gray-800 space-y-2">
+        <div className="p-3 border-t border-white/10 space-y-2 mb-4">
           <button
             onClick={handleBuildKB}
             disabled={isBuilding}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+            className={`w-full flex items-center h-12 px-4 rounded-xl transition-all duration-200 ${
               isBuilding
-                ? "bg-gray-800 text-gray-500 cursor-not-allowed"
-                : "text-gray-400 hover:bg-gray-800 hover:text-white"
+                ? "bg-white/5 text-gray-500 cursor-not-allowed"
+                : "text-gray-300 hover:bg-white/5 hover:text-white"
             }`}
           >
-            <Database className="w-5 h-5" />
-            <span>{isBuilding ? "构建中..." : "更新知识库"}</span>
+            <Database className="w-6 h-6 min-w-[1.5rem]" />
+            <span className="ml-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap delay-75">
+              {isBuilding ? "构建中..." : "更新知识库"}
+            </span>
           </button>
           
           <button
             onClick={() => setActiveTab("settings")}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-              activeTab === "settings" ? "bg-blue-600 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white"
+            className={`w-full flex items-center h-12 px-4 rounded-xl transition-all duration-200 ${
+              activeTab === "settings" 
+                ? "bg-white/10 text-white shadow-sm" 
+                : "text-gray-300 hover:bg-white/5 hover:text-white"
             }`}
           >
-            <Settings className="w-5 h-5" />
-            <span>设置</span>
+            <Settings className="w-6 h-6 min-w-[1.5rem]" />
+            <span className="ml-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap delay-75">
+              设置
+            </span>
           </button>
         </div>
       </aside>
