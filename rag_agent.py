@@ -166,6 +166,7 @@ class RAGAgent:
         query: str,
         context: str,
         chat_history: Optional[List[Dict]] = None,
+        stream: bool = False,
     ) -> str:
         """生成回答
 
@@ -173,6 +174,7 @@ class RAGAgent:
             query: 用户问题
             context: 检索到的上下文
             chat_history: 对话历史
+            stream: 是否流式输出
         """
         messages = [{"role": "system", "content": self.system_prompt}]
 
@@ -214,9 +216,13 @@ class RAGAgent:
                 temperature=0.7,
                 max_tokens=1500,
                 seed=1024,
+                stream=stream,
             )
 
-            return response.choices[0].message.content
+            if stream:
+                return response
+            else:
+                return response.choices[0].message.content
         except Exception as e:
             return f"生成回答时出错: {str(e)}"
 
@@ -347,17 +353,18 @@ class RAGAgent:
                 return f'{{"error": "{str(inner_e)}"}}'
 
     def answer_question(
-        self, query: str, chat_history: Optional[List[Dict]] = None, top_k: int = TOP_K
-    ) -> Dict[str, any]:
+        self, query: str, chat_history: Optional[List[Dict]] = None, top_k: int = TOP_K, stream: bool = False
+    ) -> any:
         """回答问题
 
         参数:
             query: 用户问题
             chat_history: 对话历史
             top_k: 检索文档数量
+            stream: 是否流式输出
 
         返回:
-            生成的回答
+            生成的回答 (字符串或生成器)
         """
         # 0. 如果是新对话，重置上下文窗口
         if not chat_history:
@@ -385,14 +392,20 @@ class RAGAgent:
             context = "（未检索到特别相关的课程材料）"
 
         # 5. 生成回答 (使用大模型)
-        # 注意：这里我们使用原始 query 还是 rewritten_query 给大模型？
-        # 通常给大模型看原始 query 比较自然，因为 context 已经包含了必要信息。
-        # 但如果 query 指代不明，rewritten_query 可能更好。
-        # 这里我们选择使用 rewritten_query 作为 prompt 的一部分，或者在 prompt 中说明。
-        # 简单起见，我们还是传原始 query，因为 context 已经通过 rewritten_query 找准了。
-        answer = self.generate_response(query, context, chat_history)
+        response = self.generate_response(rewritten_query, context, chat_history, stream=stream)
 
-        return answer
+        if stream:
+            # 如果是流式，返回一个生成器
+            def stream_generator():
+                try:
+                    for chunk in response:
+                        if chunk.choices[0].delta.content is not None:
+                            yield chunk.choices[0].delta.content
+                except Exception as e:
+                    yield f"生成回答时出错: {str(e)}"
+            return stream_generator()
+        else:
+            return response
 
     def chat(self) -> None:
         """交互式对话"""

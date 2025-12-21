@@ -250,12 +250,32 @@ export default function Home() {
         throw new Error(errorData.detail || "Failed to get response");
       }
 
-      const data = await response.json();
-      const assistantMessage: Message = {
-        role: "assistant",
-        content: data.answer,
-      };
+      if (!response.body) {
+        throw new Error("ReadableStream not supported in this browser.");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let assistantMessage = { role: "assistant", content: "" } as Message;
+      
+      // 先添加一个空的 assistant message
       setMessages((prev) => [...prev, assistantMessage]);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value, { stream: true });
+        assistantMessage.content += chunk;
+        
+        // 更新最后一条消息
+        setMessages((prev) => {
+          const newMessages = [...prev];
+          newMessages[newMessages.length - 1] = { ...assistantMessage };
+          return newMessages;
+        });
+      }
+
     } catch (error: any) {
       console.error("Error chatting:", error);
       const errorMessage: Message = {

@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
@@ -64,7 +65,7 @@ async def build_knowledge_base():
         raise HTTPException(status_code=500, detail=f"构建知识库失败: {str(e)}")
 
 
-@app.post("/chat", response_model=ChatResponse)
+@app.post("/chat")
 async def chat(request: ChatRequest):
     global rag_agent
     if not rag_agent:
@@ -77,10 +78,11 @@ async def chat(request: ChatRequest):
             )
 
     try:
-        # 转换历史记录格式以匹配 RAGAgent 的期望 (如果需要)
-        # 这里假设 RAGAgent.answer_question 接受的 history 格式与前端一致
-        answer = rag_agent.answer_question(request.query, chat_history=request.history)
-        return ChatResponse(answer=answer)
+        # 使用流式响应
+        return StreamingResponse(
+            rag_agent.answer_question(request.query, chat_history=request.history, stream=True),
+            media_type="text/event-stream"
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"生成回答失败: {str(e)}")
 
