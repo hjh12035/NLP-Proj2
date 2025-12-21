@@ -80,8 +80,10 @@ async def chat(request: ChatRequest):
     try:
         # 使用流式响应
         return StreamingResponse(
-            rag_agent.answer_question(request.query, chat_history=request.history, stream=True),
-            media_type="text/event-stream"
+            rag_agent.answer_question(
+                request.query, chat_history=request.history, stream=True
+            ),
+            media_type="text/event-stream",
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"生成回答失败: {str(e)}")
@@ -133,16 +135,18 @@ async def generate_outline(request: OutlineRequest):
         raise HTTPException(status_code=503, detail="Agent not initialized")
 
     try:
-        outline_json = rag_agent.generate_outline(topic=request.topic)
+        # 使用流式响应返回 Markdown
+        response = rag_agent.generate_outline(topic=request.topic, stream=True)
 
-        try:
-            return json.loads(outline_json)
-        except json.JSONDecodeError:
-            match = re.search(r"\{.*\}", outline_json, re.DOTALL)
-            if match:
-                return json.loads(match.group(0))
-            else:
-                return {"error": "Failed to parse outline JSON", "raw": outline_json}
+        def stream_generator():
+            try:
+                for chunk in response:
+                    if chunk.choices[0].delta.content is not None:
+                        yield chunk.choices[0].delta.content
+            except Exception as e:
+                yield f"生成提纲失败: {str(e)}"
+
+        return StreamingResponse(stream_generator(), media_type="text/event-stream")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

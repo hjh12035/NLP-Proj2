@@ -6,7 +6,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import "katex/dist/katex.min.css";
-import { MessageSquare, BookOpen, FileText, Settings, Database, GraduationCap, ChevronDown, ChevronUp, ChevronRight, Circle, Trash2, Upload, File, RefreshCw, AlertTriangle, X, Loader2, Save } from "lucide-react";
+import { MessageSquare, BookOpen, FileText, Settings, Database, GraduationCap, Trash2, Upload, File, RefreshCw, AlertTriangle, X, Loader2, Save, ChevronDown, ChevronUp } from "lucide-react";
 
 interface Message {
   role: "user" | "assistant";
@@ -21,11 +21,6 @@ interface QuizQuestion {
   answer: string;
   explanation: string;
   source: string;
-}
-
-interface OutlineNode {
-  title: string;
-  children?: OutlineNode[];
 }
 
 interface KBFile {
@@ -69,7 +64,7 @@ export default function Home() {
 
   // Outline State
   const [outlineTopic, setOutlineTopic] = useState("");
-  const [outlineData, setOutlineData] = useState<OutlineNode | null>(null);
+  const [outlineContent, setOutlineContent] = useState("");
   const [isOutlineLoading, setIsOutlineLoading] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -330,7 +325,7 @@ export default function Home() {
     if (isOutlineLoading) return;
 
     setIsOutlineLoading(true);
-    setOutlineData(null);
+    setOutlineContent("");
 
     try {
       const response = await fetch("http://localhost:8000/outline", {
@@ -345,8 +340,20 @@ export default function Home() {
         throw new Error("Failed to generate outline");
       }
 
-      const data = await response.json();
-      setOutlineData(data);
+      if (!response.body) {
+        throw new Error("ReadableStream not supported");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value, { stream: true });
+        setOutlineContent((prev) => prev + chunk);
+      }
     } catch (error) {
       console.error("Error generating outline:", error);
       alert("生成提纲失败，请稍后重试");
@@ -650,19 +657,19 @@ export default function Home() {
             </header>
 
             <div className="flex-1 overflow-y-auto p-6">
-              {outlineData ? (
+              {outlineContent ? (
                 <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-                  <h1 className="text-2xl font-bold text-gray-900 mb-6 text-center border-b pb-4">
-                    {outlineData.title}
-                  </h1>
-                  <div className="space-y-2">
-                    {outlineData.children?.map((child, idx) => (
-                      <OutlineTreeItem key={idx} node={child} level={0} />
-                    ))}
+                  <div className="prose max-w-none">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkMath, remarkGfm]}
+                      rehypePlugins={[rehypeKatex]}
+                    >
+                      {preprocessLaTeX(outlineContent)}
+                    </ReactMarkdown>
                   </div>
-                  <div className="mt-8 text-center">
+                  <div className="mt-8 text-center border-t pt-4">
                     <button
-                      onClick={() => setOutlineData(null)}
+                      onClick={() => setOutlineContent("")}
                       className="text-blue-600 hover:underline text-sm"
                     >
                       重新生成
@@ -690,7 +697,7 @@ export default function Home() {
               )}
             </div>
 
-            {!outlineData && !isOutlineLoading && (
+            {!outlineContent && !isOutlineLoading && (
               <div className="p-6 bg-white border-t">
                 <div className="max-w-4xl mx-auto">
                   <form onSubmit={handleOutlineSubmit}>
@@ -993,55 +1000,6 @@ export default function Home() {
           </div>
         )}
       </main>
-    </div>
-  );
-}
-
-function OutlineTreeItem({ node, level }: { node: OutlineNode; level: number }) {
-  const [isOpen, setIsOpen] = useState(true);
-  const hasChildren = node.children && node.children.length > 0;
-
-  return (
-    <div className="select-none">
-      <div
-        className={`flex items-center gap-2 py-2 px-2 rounded-lg cursor-pointer transition-colors ${
-          level === 0 ? "hover:bg-gray-50" : "hover:bg-gray-50"
-        }`}
-        style={{ paddingLeft: `${level * 1.5 + 0.5}rem` }}
-        onClick={() => hasChildren && setIsOpen(!isOpen)}
-      >
-        {hasChildren ? (
-          <div className="text-gray-400 hover:text-gray-600">
-            {isOpen ? (
-              <ChevronDown className="w-4 h-4" />
-            ) : (
-              <ChevronRight className="w-4 h-4" />
-            )}
-          </div>
-        ) : (
-          <Circle className="w-2 h-2 text-gray-300 ml-1" />
-        )}
-        
-        <span
-          className={`${
-            level === 0
-              ? "font-semibold text-gray-800 text-lg"
-              : level === 1
-              ? "font-medium text-gray-700"
-              : "text-gray-600"
-          }`}
-        >
-          {node.title}
-        </span>
-      </div>
-
-      {hasChildren && isOpen && (
-        <div className="animate-in slide-in-from-top-2 duration-200">
-          {node.children!.map((child, idx) => (
-            <OutlineTreeItem key={idx} node={child} level={level + 1} />
-          ))}
-        </div>
-      )}
     </div>
   );
 }
