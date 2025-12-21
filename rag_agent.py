@@ -150,6 +150,8 @@ class RAGAgent:
         if not context:
             context = "（未检索到特别相关的课程材料）"
 
+        print(f"\n[调试] 检索到的上下文:\n{context}\n")
+        
         answer = self.generate_response(query, context, chat_history)
 
         return answer

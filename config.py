@@ -2,7 +2,7 @@
 OPENAI_API_KEY = "sk-fb4a196bdd0a4f3ca90971f9ecd90ee9"
 OPENAI_API_BASE = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 MODEL_NAME = "qwen3-max"
-OPENAI_EMBEDDING_MODEL = "text-embedding-v4"
+OPENAI_EMBEDDING_MODEL = "text-embedding-v2"
 
 # 数据目录配置
 DATA_DIR = "./data"
@@ -17,4 +17,4 @@ CHUNK_OVERLAP = 50
 MAX_TOKENS = 4096
 
 # RAG配置
-TOP_K = 3
+TOP_K = 5

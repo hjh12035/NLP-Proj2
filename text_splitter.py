@@ -80,7 +80,8 @@ class TextSplitter:
                     "filetype": filetype,
                     "page_number": doc.get("page_number", 0),
                     "chunk_id": 0,
-                    "images": doc.get("images", []),
+                    "image_id": doc.get("image_id", 0),
+                    "chunk_type": doc.get("chunk_type", "text"),
                 }
                 chunks_with_metadata.append(chunk_data)
 
@@ -94,7 +95,8 @@ class TextSplitter:
                         "filetype": filetype,
                         "page_number": 0,
                         "chunk_id": i,
-                        "images": [],
+                        "image_id": doc.get("image_id", 0),
+                        "chunk_type": doc.get("chunk_type", "text"),
                     }
                     chunks_with_metadata.append(chunk_data)
 

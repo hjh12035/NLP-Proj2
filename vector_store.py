@@ -1,11 +1,12 @@
 import os
-from typing import List, Dict
+from typing import List, Dict, Optional
+from collections import defaultdict
 
 import chromadb
 from chromadb.config import Settings
 from openai import OpenAI
-from pptx.shapes.picture import Picture
 from tqdm import tqdm
+from rank_bm25 import BM25Okapi
 
 from config import (
     VECTOR_DB_PATH,
@@ -42,6 +43,23 @@ class VectorStore:
         self.collection = self.chroma_client.get_or_create_collection(
             name=collection_name, metadata={"description": "课程材料向量数据库"}
         )
+
+        # BM25 相关缓存
+        self._bm25_tokens: List[List[str]] = []
+        self._bm25_documents: List[str] = []
+        self._bm25_metadatas: List[Dict] = []
+        self._bm25_ids: List[str] = []
+        self._bm25_model: Optional[BM25Okapi] = None
+
+    @staticmethod
+    def _tokenize(text: str) -> List[str]:
+        return [token for token in text.lower().split() if token.strip()]
+
+    def _rebuild_bm25_index(self) -> None:
+        if self._bm25_tokens:
+            self._bm25_model = BM25Okapi(self._bm25_tokens)
+        else:
+            self._bm25_model = None
 
     def get_embedding(self, text: str) -> List[float]:
         """获取文本的向量表示
@@ -92,7 +110,12 @@ class VectorStore:
             filename = chunk.get("filename", "unknown")
             chunk_id = chunk.get("chunk_id", 0)
             page_number = chunk.get("page_number", 0)
-            uid = f"{filename}_p{page_number}_c{chunk_id}"
+            chunk_type = chunk.get("chunk_type", "text")
+            image_id = chunk.get("image_id", 0)
+            if chunk_type == "image":
+                uid = f"{filename}_p{page_number}_img{image_id}"
+            else:
+                uid = f"{filename}_p{page_number}_c{chunk_id}"
 
             # 3. 准备元数据 (过滤掉复杂对象)
             meta = {
@@ -108,6 +131,13 @@ class VectorStore:
             embeddings.append(embedding)
             metadatas.append(meta)
 
+            tokens = self._tokenize(content)
+            if tokens:
+                self._bm25_tokens.append(tokens)
+                self._bm25_documents.append(content)
+                self._bm25_metadatas.append(meta)
+                self._bm25_ids.append(uid)
+
         # 批量添加到ChromaDB
         if ids:
             try:
@@ -118,18 +148,9 @@ class VectorStore:
                     ids=ids,
                 )
                 print(f"成功添加 {len(ids)} 个文档块到向量数据库")
+                self._rebuild_bm25_index()
             except Exception as e:
                 print(f"添加文档到向量数据库失败: {e}")
-
-    def add_pictures(self, pictures: List[Dict[str, str]]) -> None:
-        """添加图片到向量数据库
-        要求：
-        1. 遍历图片
-        2. 获取图片内容
-        3. 获取图片元数据
-        4. 打印添加进度
-        """
-
 
     def search(self, query: str, top_k: int = TOP_K) -> List[Dict]:
         """搜索相关文档
@@ -160,6 +181,7 @@ class VectorStore:
                 # Chroma返回的是列表的列表
                 docs = results["documents"][0]
                 metas = results["metadatas"][0]
+                ids = results["ids"][0] if results.get("ids") else []
                 distances = results["distances"][0] if results["distances"] else []
 
                 for i in range(len(docs)):
@@ -177,12 +199,79 @@ class VectorStore:
             print(f"搜索失败: {e}")
             return []
 
+    def bm25_search(self, query: str, top_k: int = TOP_K) -> List[Dict]:
+        if not self._bm25_model:
+            self._rebuild_bm25_index()
+        if not self._bm25_model:
+            return []
+
+        tokens = self._tokenize(query)
+        if not tokens:
+            return []
+
+        scores = self._bm25_model.get_scores(tokens)
+        ranked = sorted(
+            ((idx, score) for idx, score in enumerate(scores)),
+            key=lambda item: item[1],
+            reverse=True,
+        )[:top_k]
+
+        results = []
+        for idx, score in ranked:
+            results.append(
+                {
+                    "id": self._bm25_ids[idx],
+                    "content": self._bm25_documents[idx],
+                    "metadata": self._bm25_metadatas[idx],
+                    "score": float(score),
+                }
+            )
+        return results
+
+    @staticmethod
+    def _rrf_fuse(result_lists: List[List[Dict]], top_k: int, k: int = 60) -> List[Dict]:
+        scores = defaultdict(float)
+        best_payload = {}
+
+        for res_list in result_lists:
+            for rank, item in enumerate(res_list, start=1):
+                item_id = item.get("id")
+                if not item_id:
+                    continue
+                scores[item_id] += 1.0 / (k + rank)
+                if item_id not in best_payload:
+                    best_payload[item_id] = item
+
+        fused = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
+        return [
+            {**best_payload[item_id], "fused_score": score} for item_id, score in fused
+        ]
+
+    def hybrid_search(
+        self,
+        query: str,
+        top_k: int = TOP_K,
+        vector_k: int = TOP_K,
+        bm25_k: int = TOP_K,
+    ) -> List[Dict]:
+        dense_results = self.search(query, vector_k)
+        sparse_results = self.bm25_search(query, bm25_k)
+        if not dense_results and not sparse_results:
+            return []
+        fused = self._rrf_fuse([dense_results, sparse_results], top_k=top_k)
+        return fused
+
     def clear_collection(self) -> None:
         """清空collection"""
         self.chroma_client.delete_collection(name=self.collection_name)
         self.collection = self.chroma_client.create_collection(
             name=self.collection_name, metadata={"description": "课程向量数据库"}
         )
+        self._bm25_tokens.clear()
+        self._bm25_documents.clear()
+        self._bm25_metadatas.clear()
+        self._bm25_ids.clear()
+        self._bm25_model = None
         print("向量数据库已清空")
 
     def get_collection_count(self) -> int:
