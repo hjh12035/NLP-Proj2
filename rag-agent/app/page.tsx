@@ -457,8 +457,16 @@ export default function Home() {
       <main className="flex-1 flex flex-col overflow-hidden">
         {activeTab === "chat" && (
           <>
-            <header className="bg-white shadow-sm p-4 border-b">
+            <header className="bg-white shadow-sm p-4 border-b flex justify-between items-center">
               <h2 className="text-lg font-semibold text-gray-800">课程智能助手</h2>
+              <button
+                onClick={() => setMessages([])}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                title="开启新对话"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>新对话</span>
+              </button>
             </header>
             
             <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
