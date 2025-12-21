@@ -72,3 +72,22 @@ models/
 # Optional: if you have local notebooks or large sample files
 # samples/
 # notebooks/
+
+# LaTeX build artifacts
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.pdf
+*.synctex.gz
+*.toc
+
+
+# Node.js / Frontend
+node_modules/
+.next/
+npm-debug.log
+yarn-error.log
