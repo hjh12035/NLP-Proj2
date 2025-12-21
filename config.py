@@ -1,7 +1,8 @@
 # API配置
 OPENAI_API_KEY = "sk-fb4a196bdd0a4f3ca90971f9ecd90ee9"
 OPENAI_API_BASE = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-MODEL_NAME = "qwen3-max"
+MODEL_NAME = "qwen3-max"  # 主模型（大模型）：负责深度生成
+FAST_MODEL_NAME = "qwen-flash"  # 快速模型（小模型）：负责意图识别与重写
 OPENAI_EMBEDDING_MODEL = "text-embedding-v2"
 
 # 数据目录配置
