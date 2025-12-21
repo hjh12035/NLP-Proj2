@@ -1,4 +1,5 @@
 import os
+import shutil
 from typing import List, Dict, Optional
 import pytesseract
 from PIL import Image
@@ -311,8 +312,10 @@ class DocumentLoader:
         if not os.path.exists(self.data_dir):
             print(f"数据目录不存在: {self.data_dir}")
             return None
-        if not os.path.exists(image_output_dir):
-            os.makedirs(image_output_dir, exist_ok=True)
+        if os.path.exists(image_output_dir):
+            shutil.rmtree(image_output_dir)
+            print("图片目录已清空")
+        os.makedirs(image_output_dir, exist_ok=True)
 
         documents = []
 
