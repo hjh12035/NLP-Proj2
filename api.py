@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Optional
@@ -6,9 +6,10 @@ import uvicorn
 import os
 import json
 import re
+import shutil
 from rag_agent import RAGAgent
 from process_data import main as build_kb_main
-from config import MODEL_NAME, VECTOR_DB_PATH
+from config import MODEL_NAME, VECTOR_DB_PATH, DATA_DIR
 
 app = FastAPI()
 
@@ -142,6 +143,53 @@ async def generate_outline(request: OutlineRequest):
                 return {"error": "Failed to parse outline JSON", "raw": outline_json}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/files")
+async def list_files():
+    """列出知识库目录下的所有文件"""
+    try:
+        if not os.path.exists(DATA_DIR):
+            os.makedirs(DATA_DIR)
+
+        files = []
+        for f in os.listdir(DATA_DIR):
+            file_path = os.path.join(DATA_DIR, f)
+            if os.path.isfile(file_path):
+                files.append({"name": f, "size": os.path.getsize(file_path)})
+        return {"files": files}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取文件列表失败: {str(e)}")
+
+
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    """上传文件到知识库目录"""
+    try:
+        if not os.path.exists(DATA_DIR):
+            os.makedirs(DATA_DIR)
+
+        file_path = os.path.join(DATA_DIR, file.filename)
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        return {"message": f"文件 {file.filename} 上传成功"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"上传文件失败: {str(e)}")
+
+
+@app.delete("/files/{filename}")
+async def delete_file(filename: str):
+    """删除知识库目录下的文件"""
+    try:
+        file_path = os.path.join(DATA_DIR, filename)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            return {"message": f"文件 {filename} 删除成功"}
+        else:
+            raise HTTPException(status_code=404, detail="文件不存在")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除文件失败: {str(e)}")
 
 
 if __name__ == "__main__":

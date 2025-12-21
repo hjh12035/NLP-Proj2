@@ -6,7 +6,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import "katex/dist/katex.min.css";
-import { MessageSquare, BookOpen, FileText, Settings, Database, GraduationCap, ChevronDown, ChevronUp, ChevronRight, Circle } from "lucide-react";
+import { MessageSquare, BookOpen, FileText, Settings, Database, GraduationCap, ChevronDown, ChevronUp, ChevronRight, Circle, Trash2, Upload, File, RefreshCw, AlertTriangle, X, Loader2 } from "lucide-react";
 
 interface Message {
   role: "user" | "assistant";
@@ -28,6 +28,11 @@ interface OutlineNode {
   children?: OutlineNode[];
 }
 
+interface KBFile {
+  name: string;
+  size: number;
+}
+
 const preprocessLaTeX = (content: string) => {
   // Replace block math \[ ... \] with $$ ... $$
   const blockReplaced = content.replace(/\\\[([\s\S]*?)\\\]/g, (_, equation) => `$$${equation}$$`);
@@ -36,7 +41,7 @@ const preprocessLaTeX = (content: string) => {
   return inlineReplaced;
 };
 
-type Tab = "chat" | "quiz" | "outline" | "settings";
+type Tab = "chat" | "quiz" | "outline" | "settings" | "knowledge-base";
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>("chat");
@@ -45,6 +50,11 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [isBuilding, setIsBuilding] = useState(false);
   
+  // Knowledge Base State
+  const [files, setFiles] = useState<KBFile[]>([]);
+  const [showRebuildConfirm, setShowRebuildConfirm] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+
   // Quiz State
   const [quizTopic, setQuizTopic] = useState("");
   const [quizDifficulty, setQuizDifficulty] = useState("简单");
@@ -86,6 +96,90 @@ export default function Home() {
       alert("构建知识库失败，请检查后端服务。");
     } finally {
       setIsBuilding(false);
+      setShowRebuildConfirm(false);
+    }
+  };
+
+  const fetchFiles = async () => {
+    try {
+      const response = await fetch("http://localhost:8000/files");
+      if (response.ok) {
+        const data = await response.json();
+        setFiles(data.files);
+      }
+    } catch (error) {
+      console.error("Error fetching files:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "knowledge-base") {
+      fetchFiles();
+    }
+  }, [activeTab]);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    
+    setIsUploading(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    try {
+      for (let i = 0; i < e.target.files.length; i++) {
+        const file = e.target.files[i];
+        const formData = new FormData();
+        formData.append("file", file);
+        
+        try {
+          const response = await fetch("http://localhost:8000/upload", {
+            method: "POST",
+            body: formData,
+          });
+          
+          if (response.ok) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch (error) {
+          console.error(`Error uploading file ${file.name}:`, error);
+          failCount++;
+        }
+      }
+      
+      await fetchFiles();
+      if (failCount === 0) {
+        alert(`成功上传 ${successCount} 个文件！`);
+      } else {
+        alert(`上传完成：${successCount} 个成功，${failCount} 个失败`);
+      }
+    } catch (error) {
+      console.error("Error uploading files:", error);
+      alert("文件上传出错");
+    } finally {
+      setIsUploading(false);
+      // Reset input
+      e.target.value = "";
+    }
+  };
+
+  const handleDeleteFile = async (filename: string) => {
+    if (!confirm(`确定要删除文件 ${filename} 吗？`)) return;
+    
+    try {
+      const response = await fetch(`http://localhost:8000/files/${filename}`, {
+        method: "DELETE",
+      });
+      
+      if (response.ok) {
+        await fetchFiles();
+      } else {
+        alert("删除文件失败");
+      }
+    } catch (error) {
+      console.error("Error deleting file:", error);
+      alert("删除文件出错");
     }
   };
 
@@ -262,17 +356,16 @@ export default function Home() {
 
         <div className="p-3 border-t border-white/10 space-y-2 mb-4">
           <button
-            onClick={handleBuildKB}
-            disabled={isBuilding}
+            onClick={() => setActiveTab("knowledge-base")}
             className={`w-full flex items-center h-12 px-4 rounded-xl transition-all duration-200 ${
-              isBuilding
-                ? "bg-white/5 text-gray-500 cursor-not-allowed"
+              activeTab === "knowledge-base"
+                ? "bg-white/10 text-white shadow-sm"
                 : "text-gray-300 hover:bg-white/5 hover:text-white"
             }`}
           >
             <Database className="w-6 h-6 min-w-[1.5rem]" />
             <span className="ml-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap delay-75">
-              {isBuilding ? "构建中..." : "更新知识库"}
+              管理知识库
             </span>
           </button>
           
@@ -556,6 +649,129 @@ export default function Home() {
                       </button>
                     </div>
                   </form>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "knowledge-base" && (
+          <div className="flex-1 flex flex-col h-full bg-gray-50">
+            <header className="bg-white shadow-sm p-6 border-b flex justify-between items-center">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">知识库管理</h2>
+                <p className="text-gray-500 mt-1">管理用于RAG检索的文档资料</p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowRebuildConfirm(true)}
+                  disabled={isBuilding}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
+                    isBuilding
+                      ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200"
+                      : "bg-white text-amber-600 border-amber-200 hover:bg-amber-50"
+                  }`}
+                >
+                  {isBuilding ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4" />
+                  )}
+                  {isBuilding ? "构建中..." : "重建索引"}
+                </button>
+                <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer transition-colors shadow-sm">
+                  <Upload className="w-4 h-4" />
+                  上传文档
+                  <input
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={handleFileUpload}
+                    accept=".txt,.pdf,.md"
+                  />
+                </label>
+              </div>
+            </header>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-gray-50 border-b border-gray-100">
+                      <tr>
+                        <th className="px-6 py-4 font-medium text-gray-500">文件名</th>
+                        <th className="px-6 py-4 font-medium text-gray-500">大小</th>
+                        <th className="px-6 py-4 font-medium text-gray-500 text-right">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {files.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} className="px-6 py-12 text-center text-gray-400">
+                            <div className="flex flex-col items-center gap-3">
+                              <FileText className="w-12 h-12 text-gray-200" />
+                              <p>暂无文档，请上传</p>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        files.map((file) => (
+                          <tr key={file.name} className="hover:bg-gray-50/50 transition-colors group">
+                            <td className="px-6 py-4 text-gray-900 font-medium flex items-center gap-3">
+                              <FileText className="w-5 h-5 text-blue-500" />
+                              {file.name}
+                            </td>
+                            <td className="px-6 py-4 text-gray-500 font-mono text-xs">
+                              {(file.size / 1024).toFixed(1)} KB
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <button
+                                onClick={() => handleDeleteFile(file.name)}
+                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                title="删除"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Rebuild Confirmation Modal */}
+            {showRebuildConfirm && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
+                <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl transform transition-all scale-100">
+                  <div className="flex items-center gap-4 mb-4 text-amber-600">
+                    <div className="p-3 bg-amber-50 rounded-full">
+                      <AlertTriangle className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-900">确认重建索引？</h3>
+                  </div>
+                  <p className="text-gray-600 mb-6 leading-relaxed">
+                    重建索引将重新处理所有文档并生成向量数据。此过程可能需要几分钟时间，期间无法进行问答。
+                  </p>
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={() => setShowRebuildConfirm(false)}
+                      className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors font-medium"
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowRebuildConfirm(false);
+                        handleBuildKB();
+                      }}
+                      className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors font-medium shadow-sm"
+                    >
+                      确认重建
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
