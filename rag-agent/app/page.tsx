@@ -86,13 +86,14 @@ export default function Home() {
         method: "POST",
       });
       if (!response.ok) {
-        throw new Error("Failed to build knowledge base");
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Failed to build knowledge base");
       }
       const data = await response.json();
       alert(data.message || "知识库构建成功！");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error building KB:", error);
-      alert("构建知识库失败，请检查后端服务。");
+      alert(`构建知识库失败: ${error.message}`);
     } finally {
       setIsBuilding(false);
       setShowRebuildConfirm(false);
