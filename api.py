@@ -1,14 +1,16 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 import uvicorn
 import os
 import json
 import re
+import shutil
 from rag_agent import RAGAgent
 from process_data import main as build_kb_main
-from config import MODEL_NAME, VECTOR_DB_PATH
+from config import MODEL_NAME, VECTOR_DB_PATH, DATA_DIR, DEFAULT_CONFIG, CONFIG_FILE
 
 app = FastAPI()
 
@@ -63,7 +65,7 @@ async def build_knowledge_base():
         raise HTTPException(status_code=500, detail=f"构建知识库失败: {str(e)}")
 
 
-@app.post("/chat", response_model=ChatResponse)
+@app.post("/chat")
 async def chat(request: ChatRequest):
     global rag_agent
     if not rag_agent:
@@ -76,10 +78,13 @@ async def chat(request: ChatRequest):
             )
 
     try:
-        # 转换历史记录格式以匹配 RAGAgent 的期望 (如果需要)
-        # 这里假设 RAGAgent.answer_question 接受的 history 格式与前端一致
-        answer = rag_agent.answer_question(request.query, chat_history=request.history)
-        return ChatResponse(answer=answer)
+        # 使用流式响应
+        return StreamingResponse(
+            rag_agent.answer_question(
+                request.query, chat_history=request.history, stream=True
+            ),
+            media_type="text/event-stream",
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"生成回答失败: {str(e)}")
 
@@ -130,18 +135,103 @@ async def generate_outline(request: OutlineRequest):
         raise HTTPException(status_code=503, detail="Agent not initialized")
 
     try:
-        outline_json = rag_agent.generate_outline(topic=request.topic)
+        # 使用流式响应返回 Markdown
+        response = rag_agent.generate_outline(topic=request.topic, stream=True)
 
-        try:
-            return json.loads(outline_json)
-        except json.JSONDecodeError:
-            match = re.search(r"\{.*\}", outline_json, re.DOTALL)
-            if match:
-                return json.loads(match.group(0))
-            else:
-                return {"error": "Failed to parse outline JSON", "raw": outline_json}
+        def stream_generator():
+            try:
+                for chunk in response:
+                    if chunk.choices[0].delta.content is not None:
+                        yield chunk.choices[0].delta.content
+            except Exception as e:
+                yield f"生成提纲失败: {str(e)}"
+
+        return StreamingResponse(stream_generator(), media_type="text/event-stream")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/files")
+async def list_files():
+    """列出知识库目录下的所有文件"""
+    try:
+        if not os.path.exists(DATA_DIR):
+            os.makedirs(DATA_DIR)
+
+        files = []
+        for f in os.listdir(DATA_DIR):
+            file_path = os.path.join(DATA_DIR, f)
+            if os.path.isfile(file_path):
+                files.append({"name": f, "size": os.path.getsize(file_path)})
+        return {"files": files}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取文件列表失败: {str(e)}")
+
+
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    """上传文件到知识库目录"""
+    try:
+        if not os.path.exists(DATA_DIR):
+            os.makedirs(DATA_DIR)
+
+        file_path = os.path.join(DATA_DIR, file.filename)
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        return {"message": f"文件 {file.filename} 上传成功"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"上传文件失败: {str(e)}")
+
+
+@app.delete("/files/{filename}")
+async def delete_file(filename: str):
+    """删除知识库目录下的文件"""
+    try:
+        file_path = os.path.join(DATA_DIR, filename)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            return {"message": f"文件 {filename} 删除成功"}
+        else:
+            raise HTTPException(status_code=404, detail="文件不存在")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除文件失败: {str(e)}")
+
+
+@app.get("/settings")
+async def get_settings():
+    """获取当前配置"""
+    try:
+        current_config = DEFAULT_CONFIG.copy()
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                custom_config = json.load(f)
+                current_config.update(custom_config)
+        return current_config
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取配置失败: {str(e)}")
+
+
+@app.post("/settings")
+async def update_settings(settings: Dict[str, Any]):
+    """更新配置"""
+    try:
+        # 读取现有配置以保留未修改的项
+        current_custom_config = {}
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                current_custom_config = json.load(f)
+
+        # 更新配置
+        current_custom_config.update(settings)
+
+        # 写入文件
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(current_custom_config, f, indent=4, ensure_ascii=False)
+
+        return {"message": "配置已更新，请重启后端服务以生效"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新配置失败: {str(e)}")
 
 
 if __name__ == "__main__":

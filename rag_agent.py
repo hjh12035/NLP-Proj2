@@ -1,5 +1,6 @@
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 import json
+import concurrent.futures
 
 from openai import OpenAI
 
@@ -53,6 +54,45 @@ class RAGAgent:
     def reset_context(self):
         """重置上下文窗口"""
         self.context_window = []
+
+    def _expand_query(self, topic: str, task_type: str) -> str:
+        """
+        使用小模型扩展查询，以获得更好的检索结果
+        task_type: "quiz" 或 "outline"
+        """
+        if not topic:
+            return "课程核心知识点"
+
+        prompt = ""
+        if task_type == "quiz":
+            prompt = f"""
+            你是一个专业的课程助教。用户想要生成关于 "{topic}" 的习题。
+            请将这个主题扩展为3-5个具体的搜索关键词或短语，以便在向量数据库中检索相关的课程资料。
+            重点关注：定义、核心概念、易错点、应用场景。
+            
+            请直接返回扩展后的查询字符串，用空格分隔，不要包含其他解释。
+            """
+        elif task_type == "outline":
+            prompt = f"""
+            你是一个专业的课程助教。用户想要生成关于 "{topic}" 的复习提纲。
+            请将这个主题扩展为3-5个具体的搜索关键词或短语，以便在向量数据库中检索相关的课程资料。
+            重点关注：层级结构、主要分支、关键术语。
+            
+            请直接返回扩展后的查询字符串，用空格分隔，不要包含其他解释。
+            """
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.fast_model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+            )
+            expanded_query = response.choices[0].message.content.strip()
+            print(f"[Debug] 原始主题: {topic}, 扩展查询: {expanded_query}")
+            return expanded_query
+        except Exception as e:
+            print(f"查询扩展失败: {e}")
+            return topic
 
     def analyze_intent(self, query: str, chat_history: List[Dict]) -> Dict:
         """
@@ -166,6 +206,7 @@ class RAGAgent:
         query: str,
         context: str,
         chat_history: Optional[List[Dict]] = None,
+        stream: bool = False,
     ) -> str:
         """生成回答
 
@@ -173,6 +214,7 @@ class RAGAgent:
             query: 用户问题
             context: 检索到的上下文
             chat_history: 对话历史
+            stream: 是否流式输出
         """
         messages = [{"role": "system", "content": self.system_prompt}]
 
@@ -214,101 +256,115 @@ class RAGAgent:
                 temperature=0.7,
                 max_tokens=1500,
                 seed=1024,
+                stream=stream,
             )
 
-            return response.choices[0].message.content
+            if stream:
+                return response
+            else:
+                return response.choices[0].message.content
         except Exception as e:
             return f"生成回答时出错: {str(e)}"
 
-    def generate_quiz(
-        self, topic: str, difficulty: str, question_type: str, num_questions: int = 1
-    ) -> str:
-        """生成测验题目"""
-
-        # 1. 检索相关上下文
-        context, _ = self.retrieve_context(topic, top_k=10)
-
-        quiz_system_prompt = """
-        你是一个专业的课程出题助手。请根据提供的课程资料（如果有）和用户的主题要求，生成测验题目。
+    def _generate_single_question(
+        self, topic: str, difficulty: str, question_type: str, context: str, index: int
+    ) -> Dict:
+        """生成单道题目 (内部方法)"""
+        system_prompt = """
+        你是一个专业的课程出题助手。请根据提供的课程资料生成一道高质量的测验题目。
         
-        必须严格按照以下 JSON 格式返回结果，不要包含任何 Markdown 格式标记（如 ```json ... ```）：
+        要求：
+        1. 题目必须紧扣课程资料内容。
+        2. 难度要符合用户要求。
+        3. 必须严格按照以下 JSON 格式返回结果：
         {
-            "questions": [
-                {
-                    "id": 1,
-                    "type": "选择题" 或 "简答题",
-                    "question": "题目内容",
-                    "options": ["选项A", "选项B", "选项C", "选项D"] (如果是简答题则为空列表),
-                    "answer": "参考答案",
-                    "explanation": "答案解析",
-                    "source": "参考资料来源（如：文档X 第Y页）"
-                }
-            ]
+            "type": "...",
+            "question": "...",
+            "options": ["..."] (如果是简答题则为空列表),
+            "answer": "...",
+            "explanation": "...",
+            "source": "..."
         }
         """
 
         user_prompt = f"""
-        请生成 {num_questions} 道关于 "{topic}" 的 {difficulty} 难度的 {question_type}。
+        请生成一道关于 "{topic}" 的 {difficulty} 难度的 {question_type}。
+        这是第 {index} 道题，请尽量覆盖不同的知识点。
         
         参考资料：
         {context}
         """
 
-        messages = [
-            {"role": "system", "content": quiz_system_prompt},
-            {"role": "user", "content": user_prompt},
-        ]
-
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
-                messages=messages,
-                temperature=0.7,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.8,  # 稍微提高温度以增加多样性
                 response_format={"type": "json_object"},
             )
-            return response.choices[0].message.content
+            return json.loads(response.choices[0].message.content)
         except Exception as e:
-            # Fallback for models that don't support response_format
-            try:
-                response = self.client.chat.completions.create(
-                    model=self.model, messages=messages, temperature=0.7
-                )
-                return response.choices[0].message.content
-            except Exception as inner_e:
-                return f'{{"error": "{str(inner_e)}"}}'
+            print(f"生成题目失败: {e}")
+            return None
 
-    def generate_outline(self, topic: str = "") -> str:
-        """生成复习提纲"""
+    def generate_quiz(
+        self, topic: str, difficulty: str, question_type: str, num_questions: int = 1
+    ) -> str:
+        """生成测验题目 (并行生成)"""
+
+        # 1. 扩展查询并检索相关上下文
+        search_query = self._expand_query(topic, "quiz")
+        context, _ = self.retrieve_context(search_query, top_k=10)
+
+        # 2. 并行生成题目
+        questions = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            futures = [
+                executor.submit(
+                    self._generate_single_question,
+                    topic,
+                    difficulty,
+                    question_type,
+                    context,
+                    i + 1,
+                )
+                for i in range(num_questions)
+            ]
+
+            for i, future in enumerate(concurrent.futures.as_completed(futures)):
+                result = future.result()
+                if result:
+                    result["id"] = i + 1  # 重新编号
+                    questions.append(result)
+
+        # 3. 组装最终结果
+        return json.dumps({"questions": questions}, ensure_ascii=False)
+
+    def generate_outline(self, topic: str = "", stream: bool = False) -> Any:
+        """生成复习提纲 (支持流式 Markdown)"""
 
         # 1. Determine query for context retrieval
-        search_query = topic if topic else "课程大纲 核心知识点 总结"
+        search_query = (
+            self._expand_query(topic, "outline")
+            if topic
+            else "课程大纲 核心知识点 总结"
+        )
 
         # 2. Retrieve context
-        context, _ = self.retrieve_context(search_query, top_k=10)
+        context, _ = self.retrieve_context(search_query, top_k=15)
 
         outline_system_prompt = """
         你是一个专业的课程助教。请根据提供的课程资料和用户的主题（如果有），生成一个结构化的复习提纲。
         
-        必须严格按照以下 JSON 格式返回结果，不要包含任何 Markdown 格式标记：
-        {
-            "title": "提纲主题",
-            "children": [
-                {
-                    "title": "一级知识点",
-                    "children": [
-                        {
-                            "title": "二级知识点",
-                            "children": [] (可选)
-                        }
-                    ]
-                }
-            ]
-        }
-        
         要求：
-        1. 结构清晰，层级分明。
-        2. 知识点覆盖全面但精炼。
-        3. 如果用户未提供主题，则生成整个课程的复习大纲。
+        1. 使用 Markdown 格式。
+        2. 使用 #, ##, ### 表示层级结构。
+        3. 使用无序列表 (-) 列出具体知识点。
+        4. 重点突出，逻辑清晰。
+        5. 不要包含 JSON，直接输出 Markdown 文本。
         """
 
         user_prompt_text = (
@@ -333,31 +389,34 @@ class RAGAgent:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                temperature=0.5,  # Lower temperature for more structured output
-                response_format={"type": "json_object"},
+                temperature=0.5,
+                stream=stream,
             )
-            return response.choices[0].message.content
-        except Exception as e:
-            try:
-                response = self.client.chat.completions.create(
-                    model=self.model, messages=messages, temperature=0.5
-                )
+
+            if stream:
+                return response
+            else:
                 return response.choices[0].message.content
-            except Exception as inner_e:
-                return f'{{"error": "{str(inner_e)}"}}'
+        except Exception as e:
+            return f"生成提纲失败: {str(e)}"
 
     def answer_question(
-        self, query: str, chat_history: Optional[List[Dict]] = None, top_k: int = TOP_K
-    ) -> Dict[str, any]:
+        self,
+        query: str,
+        chat_history: Optional[List[Dict]] = None,
+        top_k: int = TOP_K,
+        stream: bool = False,
+    ) -> Any:
         """回答问题
 
         参数:
             query: 用户问题
             chat_history: 对话历史
             top_k: 检索文档数量
+            stream: 是否流式输出
 
         返回:
-            生成的回答
+            生成的回答 (字符串或生成器)
         """
         # 0. 如果是新对话，重置上下文窗口
         if not chat_history:
@@ -385,14 +444,23 @@ class RAGAgent:
             context = "（未检索到特别相关的课程材料）"
 
         # 5. 生成回答 (使用大模型)
-        # 注意：这里我们使用原始 query 还是 rewritten_query 给大模型？
-        # 通常给大模型看原始 query 比较自然，因为 context 已经包含了必要信息。
-        # 但如果 query 指代不明，rewritten_query 可能更好。
-        # 这里我们选择使用 rewritten_query 作为 prompt 的一部分，或者在 prompt 中说明。
-        # 简单起见，我们还是传原始 query，因为 context 已经通过 rewritten_query 找准了。
-        answer = self.generate_response(query, context, chat_history)
+        response = self.generate_response(
+            rewritten_query, context, chat_history, stream=stream
+        )
 
-        return answer
+        if stream:
+            # 如果是流式，返回一个生成器
+            def stream_generator():
+                try:
+                    for chunk in response:
+                        if chunk.choices[0].delta.content is not None:
+                            yield chunk.choices[0].delta.content
+                except Exception as e:
+                    yield f"生成回答时出错: {str(e)}"
+
+            return stream_generator()
+        else:
+            return response
 
     def chat(self) -> None:
         """交互式对话"""
