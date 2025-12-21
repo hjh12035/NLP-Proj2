@@ -397,7 +397,7 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
 
 ## 联系方式
 
-- 作者: hjh12035
+- 作者: hjh12035、WuYanJoker
 - GitHub: https://github.com/hjh12035/NLP-Proj2
 
 ## 致谢
@@ -408,4 +408,3 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
 - ChromaDB
 - FastAPI
 - Next.js
-- 以及 requirements.txt 和 package.json 中列出的所有依赖
