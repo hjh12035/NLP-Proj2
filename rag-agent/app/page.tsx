@@ -6,7 +6,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import "katex/dist/katex.min.css";
-import { MessageSquare, BookOpen, FileText, Settings, Database, GraduationCap, ChevronDown, ChevronUp, ChevronRight, Circle, Trash2, Upload, File, RefreshCw, AlertTriangle, X, Loader2 } from "lucide-react";
+import { MessageSquare, BookOpen, FileText, Settings, Database, GraduationCap, ChevronDown, ChevronUp, ChevronRight, Circle, Trash2, Upload, File, RefreshCw, AlertTriangle, X, Loader2, Save } from "lucide-react";
 
 interface Message {
   role: "user" | "assistant";
@@ -63,6 +63,10 @@ export default function Home() {
   const [quizResults, setQuizResults] = useState<QuizQuestion[]>([]);
   const [isQuizLoading, setIsQuizLoading] = useState(false);
 
+  // Settings State
+  const [settings, setSettings] = useState<any>({});
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+
   // Outline State
   const [outlineTopic, setOutlineTopic] = useState("");
   const [outlineData, setOutlineData] = useState<OutlineNode | null>(null);
@@ -112,9 +116,46 @@ export default function Home() {
     }
   };
 
+  const fetchSettings = async () => {
+    try {
+      const response = await fetch("http://localhost:8000/settings");
+      if (response.ok) {
+        const data = await response.json();
+        setSettings(data);
+      }
+    } catch (error) {
+      console.error("Error fetching settings:", error);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    setIsSavingSettings(true);
+    try {
+      const response = await fetch("http://localhost:8000/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        alert(data.message);
+      } else {
+        alert("保存设置失败");
+      }
+    } catch (error) {
+      console.error("Error saving settings:", error);
+      alert("保存设置出错");
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === "knowledge-base") {
       fetchFiles();
+    } else if (activeTab === "settings") {
+      fetchSettings();
     }
   }, [activeTab]);
 
@@ -779,10 +820,155 @@ export default function Home() {
         )}
 
         {activeTab === "settings" && (
-          <div className="flex-1 p-8">
-            <h2 className="text-2xl font-bold mb-6">设置</h2>
-            <div className="bg-white rounded-lg shadow p-6">
-              <p className="text-gray-600">暂无设置选项</p>
+          <div className="flex-1 flex flex-col h-full bg-gray-50 overflow-hidden">
+            <header className="bg-white shadow-sm p-6 border-b flex justify-between items-center shrink-0">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">系统设置</h2>
+                <p className="text-gray-500 mt-1">配置模型参数与系统选项</p>
+              </div>
+              <button
+                onClick={handleSaveSettings}
+                disabled={isSavingSettings}
+                className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
+              >
+                {isSavingSettings ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                保存设置
+              </button>
+            </header>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="max-w-4xl mx-auto space-y-6">
+                
+                {/* API Configuration */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <Settings className="w-5 h-5 text-blue-500" />
+                    API 配置
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">API Key</label>
+                      <input
+                        type="password"
+                        value={settings.OPENAI_API_KEY || ""}
+                        onChange={(e) => setSettings({...settings, OPENAI_API_KEY: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">API Base URL</label>
+                      <input
+                        type="text"
+                        value={settings.OPENAI_API_BASE || ""}
+                        onChange={(e) => setSettings({...settings, OPENAI_API_BASE: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">主模型 (Model Name)</label>
+                      <input
+                        type="text"
+                        value={settings.MODEL_NAME || ""}
+                        onChange={(e) => setSettings({...settings, MODEL_NAME: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">快速模型 (Fast Model)</label>
+                      <input
+                        type="text"
+                        value={settings.FAST_MODEL_NAME || ""}
+                        onChange={(e) => setSettings({...settings, FAST_MODEL_NAME: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Embedding Model</label>
+                      <input
+                        type="text"
+                        value={settings.OPENAI_EMBEDDING_MODEL || ""}
+                        onChange={(e) => setSettings({...settings, OPENAI_EMBEDDING_MODEL: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* RAG Configuration */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <Database className="w-5 h-5 text-emerald-500" />
+                    RAG 参数配置
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Top K (检索数量)</label>
+                      <input
+                        type="number"
+                        value={settings.TOP_K || 0}
+                        onChange={(e) => setSettings({...settings, TOP_K: parseInt(e.target.value)})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Chunk Size (分块大小)</label>
+                      <input
+                        type="number"
+                        value={settings.CHUNK_SIZE || 0}
+                        onChange={(e) => setSettings({...settings, CHUNK_SIZE: parseInt(e.target.value)})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Chunk Overlap (重叠大小)</label>
+                      <input
+                        type="number"
+                        value={settings.CHUNK_OVERLAP || 0}
+                        onChange={(e) => setSettings({...settings, CHUNK_OVERLAP: parseInt(e.target.value)})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Max Tokens</label>
+                      <input
+                        type="number"
+                        value={settings.MAX_TOKENS || 0}
+                        onChange={(e) => setSettings({...settings, MAX_TOKENS: parseInt(e.target.value)})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                 {/* Path Configuration */}
+                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-amber-500" />
+                    路径配置
+                  </h3>
+                  <div className="grid grid-cols-1 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">数据目录 (Data Dir)</label>
+                      <input
+                        type="text"
+                        value={settings.DATA_DIR || ""}
+                        onChange={(e) => setSettings({...settings, DATA_DIR: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">向量库路径 (Vector DB Path)</label>
+                      <input
+                        type="text"
+                        value={settings.VECTOR_DB_PATH || ""}
+                        onChange={(e) => setSettings({...settings, VECTOR_DB_PATH: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+              </div>
             </div>
           </div>
         )}

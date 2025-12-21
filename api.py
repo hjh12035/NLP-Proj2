@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 import uvicorn
 import os
 import json
@@ -9,7 +9,7 @@ import re
 import shutil
 from rag_agent import RAGAgent
 from process_data import main as build_kb_main
-from config import MODEL_NAME, VECTOR_DB_PATH, DATA_DIR
+from config import MODEL_NAME, VECTOR_DB_PATH, DATA_DIR, DEFAULT_CONFIG, CONFIG_FILE
 
 app = FastAPI()
 
@@ -190,6 +190,42 @@ async def delete_file(filename: str):
             raise HTTPException(status_code=404, detail="文件不存在")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"删除文件失败: {str(e)}")
+
+
+@app.get("/settings")
+async def get_settings():
+    """获取当前配置"""
+    try:
+        current_config = DEFAULT_CONFIG.copy()
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                custom_config = json.load(f)
+                current_config.update(custom_config)
+        return current_config
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取配置失败: {str(e)}")
+
+
+@app.post("/settings")
+async def update_settings(settings: Dict[str, Any]):
+    """更新配置"""
+    try:
+        # 读取现有配置以保留未修改的项
+        current_custom_config = {}
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                current_custom_config = json.load(f)
+
+        # 更新配置
+        current_custom_config.update(settings)
+
+        # 写入文件
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(current_custom_config, f, indent=4, ensure_ascii=False)
+
+        return {"message": "配置已更新，请重启后端服务以生效"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新配置失败: {str(e)}")
 
 
 if __name__ == "__main__":
