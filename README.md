@@ -4,30 +4,34 @@
 
 ## 项目简介
 
-本项目是一个完整的 NLP 课程辅助学习系统，包含后端 RAG 引擎和前端交互界面。系统通过向量数据库存储课程资料，使用大语言模型提供智能问答、习题生成和提纲生成等功能。
+本项目是一个完整的课程辅助学习系统，包含后端 RAG 引擎和前端交互界面。系统通过向量数据库存储指定的课程资料，使用大语言模型提供智能问答、习题生成和提纲生成等功能。
 
 ## 主要特性
 
-- **智能问答**：基于课程资料回答学生问题，并标注信息来源（文件名和页码）
+- **智能问答**：基于课程资料回答学生问题，并标注信息来源
+- **多模态处理**：支持提取和理解PDF、PPT中的图片内容（OCR），实现图文跨模态检索
+- **检索优化**：
+  - **混合检索**：结合向量检索（语义检索）和关键词检索（BM25），使用 RRF 算法融合排序
+  - **查询扩展**：自动扩展用户查询，提高检索召回率
+  - **意图识别**：分析用户意图（如追问、换话题等），动态管理上下文窗口
 - **上下文管理**：支持多轮对话，自动分析意图并管理上下文窗口
-- **习题生成**：根据指定主题和难度生成测验题目（选择题、简答题等）
-- **提纲生成**：自动生成结构化的课程复习提纲
-- **文件管理**：支持上传、删除课程文件（PDF、PPTX、DOCX、TXT）
-- **流式输出**：支持流式响应，提供更好的用户体验
-- **可配置性**：支持自定义模型、向量数据库等配置
+- **习题生成**：根据指定主题和难度生成不同种类的习题
+- **提纲生成**：自动生成结构化的主题复习提纲
+- **文件管理**：支持上传、删除课程文件（包括PDF、PPTX、DOCX、TXT四种类别）
+- **流式输出**：支持流式输出响应，提供更好的用户体验
+- **可配置性**：支持自定义API、模型、向量数据库等配置
 
 ## 技术栈
 
 ### 后端
-- **Python 3.x**
 - **FastAPI**：Web API 框架
-- **OpenAI API**：大语言模型接口（兼容通义千问等）
+- **OpenAI API**：大语言模型接口
 - **ChromaDB**：向量数据库
 - **LangChain**：LLM 应用开发框架
-- **PyPDF2/PyMuPDF**：PDF 文档处理
-- **python-pptx**：PPT 文档处理
-- **docx2txt**：Word 文档处理
 - **sentence-transformers**：文本向量化
+- **rank_bm25**：BM25 关键词检索算法
+- **pytesseract**：OCR 文字识别
+- **Pillow**：图像处理
 
 ### 前端
 - **Next.js 16**：React 框架
@@ -43,10 +47,10 @@
 NLP-Proj2/
 ├── api.py                  # FastAPI 后端服务
 ├── main.py                 # 命令行交互入口
-├── rag_agent.py           # RAG Agent 核心逻辑
-├── document_loader.py     # 文档加载器
+├── rag_agent.py           # RAG Agent 核心逻辑（包含意图识别、查询扩展）
+├── document_loader.py     # 文档加载器（支持多模态OCR）
 ├── text_splitter.py       # 文本切分器
-├── vector_store.py        # 向量数据库管理
+├── vector_store.py        # 向量数据库管理（支持混合检索）
 ├── process_data.py        # 数据处理和知识库构建
 ├── config.py              # 配置管理
 ├── config.json            # 配置文件
@@ -58,7 +62,9 @@ NLP-Proj2/
 │   │   └── globals.css    # 全局样式
 │   ├── package.json       # 前端依赖
 │   └── tsconfig.json      # TypeScript 配置
-└── data/                  # 课程资料目录（需要自己创建）
+├── data/                  # 课程资料目录 (用户上传的文件)
+│   └── images/            # 提取的图片缓存
+└── vector_db/             # ChromaDB 向量数据库文件
 ```
 
 ## 安装步骤
@@ -70,24 +76,36 @@ git clone https://github.com/hjh12035/NLP-Proj2.git
 cd NLP-Proj2
 ```
 
-### 2. 后端安装
+### 2. 环境准备
+
+#### 安装 Tesseract OCR
+本项目使用了 OCR 技术提取图片文字，需要安装 Tesseract 引擎：
+- **Windows**: 下载安装包 [UB-Mannheim/tesseract](https://github.com/UB-Mannheim/tesseract/) 并将安装路径添加到环境变量 PATH 中。
+- **Linux**: `sudo apt-get install tesseract-ocr`
+- **MacOS**: `brew install tesseract`
+
+#### 安装 Node.js
+前端项目基于 Next.js 开发，需要安装 Node.js 环境（建议安装 v20 或更高版本）：
+- 访问 [Node.js 官网](https://nodejs.org/) 下载并安装 LTS 版本。
+- 安装完成后，在终端运行 `node -v` 和 `npm -v` 检查是否安装成功。
+
+### 3. 后端安装
 
 ```bash
 # 安装 Python 依赖
 pip install -r requirements.txt
 ```
 
-### 3. 前端安装
+### 4. 前端安装
 
 ```bash
 cd rag-agent
 npm install
-# 或使用其他包管理器
-# yarn install
-# pnpm install
 ```
 
 ## 配置说明
+
+> **提示**：在运行项目之前，请务必修改根目录下的 `config.json` 文件，将 `"OPENAI_API_KEY"` 的值替换为您自己的 API Key。如果使用其他兼容 OpenAI 接口的模型服务，请同时修改 `"OPENAI_API_BASE"` 和 `"MODEL_NAME"`。
 
 ### 配置文件 (config.json)
 
@@ -97,7 +115,7 @@ npm install
     "OPENAI_API_BASE": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "MODEL_NAME": "qwen3-max",
     "FAST_MODEL_NAME": "qwen-flash",
-    "OPENAI_EMBEDDING_MODEL": "text-embedding-v2",
+    "OPENAI_EMBEDDING_MODEL": "text-embedding-v3",
     "DATA_DIR": "./data",
     "VECTOR_DB_PATH": "./vector_db",
     "COLLECTION_NAME": "nlp_course_rag",
@@ -182,102 +200,6 @@ python main.py
 
 进入交互式问答模式，可以直接提问。
 
-## API 接口文档
-
-### 1. 构建知识库
-
-```http
-POST /build-kb
-```
-
-重新构建知识库（加载 data 目录下的所有文档）。
-
-### 2. 智能问答
-
-```http
-POST /chat
-Content-Type: application/json
-
-{
-    "query": "什么是词向量？",
-    "history": [
-        {"role": "user", "content": "..."},
-        {"role": "assistant", "content": "..."}
-    ]
-}
-```
-
-返回流式文本响应。
-
-### 3. 生成习题
-
-```http
-POST /quiz
-Content-Type: application/json
-
-{
-    "topic": "词向量",
-    "difficulty": "中等",
-    "type": "选择题",
-    "num_questions": 3
-}
-```
-
-返回：
-```json
-{
-    "questions": [
-        {
-            "id": 1,
-            "type": "选择题",
-            "question": "...",
-            "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
-            "answer": "A",
-            "explanation": "...",
-            "source": "..."
-        }
-    ]
-}
-```
-
-### 4. 生成复习提纲
-
-```http
-POST /outline
-Content-Type: application/json
-
-{
-    "topic": "词向量"
-}
-```
-
-返回流式 Markdown 文本。
-
-### 5. 文件管理
-
-```http
-# 获取文件列表
-GET /files
-
-# 上传文件
-POST /upload
-Content-Type: multipart/form-data
-
-# 删除文件
-DELETE /files/{filename}
-```
-
-### 6. 配置管理
-
-```http
-# 获取配置
-GET /settings
-
-# 更新配置
-POST /settings
-Content-Type: application/json
-```
-
 ## 核心功能说明
 
 ### 1. 文档加载 (document_loader.py)
@@ -323,20 +245,6 @@ Content-Type: application/json
 #### 流式输出
 - 支持流式响应，实时返回生成内容
 
-## 系统提示词设计
-
-系统基于专业的助教角色设计，遵循以下原则：
-
-1. **专业且友好**：使用专业术语但保持友好态度
-2. **优先课程内容**：结合知识库资料并标注来源
-3. **分类处理问题**：
-   - 概念性问题：解释定义和背景
-   - 作业/练习题：引导思路，不直接给答案
-   - 实践应用问题：展示逻辑和核心代码
-4. **教育原则**：使用苏格拉底式提问法引导学生
-5. **中文为主**：默认使用中文交流
-6. **学术诚信**：遵守学术规范
-
 ## 开发说明
 
 ### 后端开发
@@ -365,7 +273,7 @@ npm run dev
 
 ### 1. 如何更换模型？
 
-修改 `config.json` 中的 `MODEL_NAME` 和 `OPENAI_EMBEDDING_MODEL`。
+修改 `config.json` 中的 `MODEL_NAME` 和 `OPENAI_EMBEDDING_MODEL`，或者在用户界面中的设置页面更改。
 
 ### 2. 知识库构建失败？
 
@@ -390,21 +298,3 @@ npm run dev
 ## 许可证
 
 MIT License - 详见 [LICENSE](LICENSE) 文件
-
-## 贡献
-
-欢迎提交 Issue 和 Pull Request！
-
-## 联系方式
-
-- 作者: hjh12035、WuYanJoker
-- GitHub: https://github.com/hjh12035/NLP-Proj2
-
-## 致谢
-
-本项目使用了以下开源项目和服务：
-- OpenAI API / 通义千问
-- LangChain
-- ChromaDB
-- FastAPI
-- Next.js
