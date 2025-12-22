@@ -8,9 +8,10 @@ import os
 import json
 import re
 import shutil
+import importlib
 from rag_agent import RAGAgent
 from process_data import main as build_kb_main
-from config import MODEL_NAME, VECTOR_DB_PATH, DATA_DIR, DEFAULT_CONFIG, CONFIG_FILE
+import config
 
 app = FastAPI()
 
@@ -42,9 +43,9 @@ class ChatResponse(BaseModel):
 async def startup_event():
     global rag_agent
     # 只有当向量库存在时才初始化 Agent，否则等待构建
-    if os.path.exists(VECTOR_DB_PATH):
+    if os.path.exists(config.VECTOR_DB_PATH):
         try:
-            rag_agent = RAGAgent(model=MODEL_NAME)
+            rag_agent = RAGAgent(model=config.MODEL_NAME)
             print("RAG Agent initialized successfully.")
         except Exception as e:
             print(f"Failed to initialize RAG Agent: {e}")
@@ -58,7 +59,7 @@ async def build_knowledge_base():
 
         # 构建完成后重新初始化 Agent
         global rag_agent
-        rag_agent = RAGAgent(model=MODEL_NAME)
+        rag_agent = RAGAgent(model=config.MODEL_NAME)
 
         return {"message": "知识库构建成功！"}
     except Exception as e:
@@ -70,8 +71,8 @@ async def chat(request: ChatRequest):
     global rag_agent
     if not rag_agent:
         # 尝试重新初始化
-        if os.path.exists(VECTOR_DB_PATH):
-            rag_agent = RAGAgent(model=MODEL_NAME)
+        if os.path.exists(config.VECTOR_DB_PATH):
+            rag_agent = RAGAgent(model=config.MODEL_NAME)
         else:
             raise HTTPException(
                 status_code=400, detail="知识库尚未构建，请先点击'构建知识库'按钮。"
@@ -155,12 +156,12 @@ async def generate_outline(request: OutlineRequest):
 async def list_files():
     """列出知识库目录下的所有文件"""
     try:
-        if not os.path.exists(DATA_DIR):
-            os.makedirs(DATA_DIR)
+        if not os.path.exists(config.DATA_DIR):
+            os.makedirs(config.DATA_DIR)
 
         files = []
-        for f in os.listdir(DATA_DIR):
-            file_path = os.path.join(DATA_DIR, f)
+        for f in os.listdir(config.DATA_DIR):
+            file_path = os.path.join(config.DATA_DIR, f)
             if os.path.isfile(file_path):
                 files.append({"name": f, "size": os.path.getsize(file_path)})
         return {"files": files}
@@ -172,10 +173,10 @@ async def list_files():
 async def upload_file(file: UploadFile = File(...)):
     """上传文件到知识库目录"""
     try:
-        if not os.path.exists(DATA_DIR):
-            os.makedirs(DATA_DIR)
+        if not os.path.exists(config.DATA_DIR):
+            os.makedirs(config.DATA_DIR)
 
-        file_path = os.path.join(DATA_DIR, file.filename)
+        file_path = os.path.join(config.DATA_DIR, file.filename)
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
@@ -188,7 +189,7 @@ async def upload_file(file: UploadFile = File(...)):
 async def delete_file(filename: str):
     """删除知识库目录下的文件"""
     try:
-        file_path = os.path.join(DATA_DIR, filename)
+        file_path = os.path.join(config.DATA_DIR, filename)
         if os.path.exists(file_path):
             os.remove(file_path)
             return {"message": f"文件 {filename} 删除成功"}
@@ -202,9 +203,9 @@ async def delete_file(filename: str):
 async def get_settings():
     """获取当前配置"""
     try:
-        current_config = DEFAULT_CONFIG.copy()
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+        current_config = config.DEFAULT_CONFIG.copy()
+        if os.path.exists(config.CONFIG_FILE):
+            with open(config.CONFIG_FILE, "r", encoding="utf-8") as f:
                 custom_config = json.load(f)
                 current_config.update(custom_config)
         return current_config
@@ -218,18 +219,36 @@ async def update_settings(settings: Dict[str, Any]):
     try:
         # 读取现有配置以保留未修改的项
         current_custom_config = {}
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+        if os.path.exists(config.CONFIG_FILE):
+            with open(config.CONFIG_FILE, "r", encoding="utf-8") as f:
                 current_custom_config = json.load(f)
 
         # 更新配置
         current_custom_config.update(settings)
 
         # 写入文件
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        with open(config.CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(current_custom_config, f, indent=4, ensure_ascii=False)
 
-        return {"message": "配置已更新，请重启后端服务以生效"}
+        # 记录旧值用于对比
+        old_model = config.MODEL_NAME
+
+        # 重新加载配置模块
+        importlib.reload(config)
+
+        print(f"[Debug] Configuration reloaded.")
+        print(f"[Debug] Model update: {old_model} -> {config.MODEL_NAME}")
+
+        # 重新初始化 Agent
+        global rag_agent
+        if rag_agent:
+            # 使用新的配置重新初始化
+            rag_agent = RAGAgent(
+                model=config.MODEL_NAME, fast_model=config.FAST_MODEL_NAME
+            )
+            print(f"[Debug] RAG Agent re-initialized with model: {config.MODEL_NAME}")
+
+        return {"message": "配置已更新并生效"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"更新配置失败: {str(e)}")
 

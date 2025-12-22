@@ -4,6 +4,8 @@ fastapi
 uvicorn
 pydantic
 python-multipart
+rank_bm25
+
 langchain>=0.1.0
 langchain-openai>=0.0.5
 pypdf2>=3.0.0
