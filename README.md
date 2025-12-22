@@ -1,4 +1,4 @@
-# NLP 课程智能助教系统
+# RAG 智能助教系统
 
 一个基于 RAG (Retrieval-Augmented Generation) 技术的智能课程助教系统，能够根据课程资料回答学生问题、生成习题和复习提纲。
 
