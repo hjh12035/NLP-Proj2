@@ -185,8 +185,10 @@ class VectorStore:
                 distances = results["distances"][0] if results["distances"] else []
 
                 for i in range(len(docs)):
+                    doc_id = ids[i] if i < len(ids) else f"vec_{i}"
                     formatted_results.append(
                         {
+                            "id": doc_id,
                             "content": docs[i],
                             "metadata": metas[i],
                             "score": distances[i] if i < len(distances) else 0.0,
