@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 from typing import List, Dict, Optional
 import pytesseract
@@ -17,6 +18,21 @@ class DocumentLoader:
     MIN_OCR_WORD_COUNT = 16
 
     @staticmethod
+    def _normalize_whitespace(text: str) -> str:
+        """压缩 OCR 文本中的多余空白和换行，返回单行或近似单行文本"""
+        if not text:
+            return ""
+        # 统一换行符，先移除 Windows 风格的回车
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        # 压缩多余的制表符和空格为单个空格
+        text = re.sub(r"[ \t]+", " ", text)
+        # 去除行首尾的空格，避免出现" \n"这样的噪声
+        text = re.sub(r" ?\n ?", "\n", text)
+        # 将多个连续的换行压缩为单个换行
+        text = re.sub(r"\n{2,}", "\n", text)
+        return text.strip()
+
+    @staticmethod
     def _is_small_bitmap(width: Optional[int], height: Optional[int]) -> bool:
         if not width or not height:
             return False
@@ -27,7 +43,8 @@ class DocumentLoader:
 
     @staticmethod
     def _is_valid_ocr_text(text: str) -> bool:
-        text = text.strip()
+        # 先规整空白再做长度和词数判断
+        text = DocumentLoader._normalize_whitespace(text)
         if len(text) < DocumentLoader.MIN_OCR_CHAR_COUNT:
             return False
         tokens = [tok for tok in text.replace("\n", " ").split() if tok]
@@ -120,8 +137,10 @@ class DocumentLoader:
         """对图片进行OCR识别，返回文本"""
         try:
             text = pytesseract.image_to_string(Image.open(image_path), lang="chi_sim+eng")
+            # 规整 OCR 结果中的换行和多余空格
+            text = self._normalize_whitespace(text)
             if self._is_valid_ocr_text(text):
-                return text.strip()
+                return text
             else:
                 return ""
         except Exception as e:
