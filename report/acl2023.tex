@@ -86,42 +86,126 @@
 为了解决上述问题，本项目采用了检索增强生成（RAG）技术。RAG通过在生成回答前检索外部知识库中的相关信息，将检索到的准确片段作为上下文输入给LLM，从而确保回答的准确性和可验证性。本项目旨在搭建一个智能课程助教系统，不仅能回答学生关于课程内容的提问，还能辅助生成练习题和复习提纲，为学生提供全方位的学习支持。
 
 \section{系统设计}
-
-本系统的整体架构包含数据处理流水线、向量检索模块、RAG核心代理以及用户交互界面四个部分。
+整体上，系统采用“离线预处理 + 在线检索生成”的架构。
+离线阶段通过 \texttt{process\_data.py} 遍历课程数据目录，对文档进行加载、切分与向量化，并写入本地 ChromaDB；
+在线阶段由 RAG Agent 接收用户问题，调用向量库检索上下文，并据此构造提示词、调用 LLM 生成回答。
+下面分别介绍各核心模块。
 
 \subsection{文档处理模块}
-文档处理是RAG系统的基础。我们实现了\texttt{DocumentLoader}类，支持多种格式文档的加载：
-\begin{itemize}
-    \item \textbf{PDF处理}：使用\texttt{PyPDF2}库按页提取文本。
-    \item \textbf{PPTX处理}：使用\texttt{python-pptx}库遍历幻灯片提取文本框内容。
-    \item \textbf{DOCX/TXT处理}：分别使用\texttt{docx2txt}和原生文件读取方式提取文本。
-\end{itemize}
+文档处理模块由 \texttt{DocumentLoader} 与 \texttt{TextSplitter} 组成，负责从多种格式的课程资料中抽取可检索的文本块，并附带必要的位置信息（如文件名与页码）。
 
-为了适应Embedding模型的输入限制并保留上下文，我们实现了\texttt{TextSplitter}类。采用滑动窗口策略，将长文本切分为固定长度（如500字符）的块（Chunk），并设置重叠区域（Overlap，如50字符），同时优化了切分逻辑，尽量在句子结束符（如句号、问号）处截断，以保证语义的完整性。
+在 PDF 与 PPTX 场景下，我们将“页/幻灯片”作为自然的切分单位。
+对于 PDF，\texttt{load\_pdf} 使用 \texttt{PdfReader} 逐页提取文本，并统一封装为形如“\verb|--- 第 X 页 ---|”的前缀结构；
+对于 PPTX，\texttt{load\_pptx} 通过 \texttt{Presentation} 遍历每一张幻灯片，
+对所有具备 \texttt{text} 属性的形状进行聚合，并以“\verb|--- 幻灯片 X ---|”标记。
+这样的设计一方面方便之后在回答中精确引用“第几页/第几张幻灯片”，另一方面也为后续的图片 OCR 与文本块融合提供位置对齐依据。
+
+对于 DOCX 与 TXT 文件，我们认为其天然是线性长文本，不适合简单按页/行切分。
+因而 \texttt{load\_docx} 与 \texttt{load\_txt} 仅负责读取完整字符串，实际的块划分则交由 \texttt{TextSplitter} 完成。
+该类在初始化时接收 \texttt{chunk\_size} 与 \texttt{chunk\_overlap} 两个超参数，
+分别控制每个文本块的最大长度与相邻块之间的重叠长度。
+
+在 \texttt{split\_text} 中，我们采取“窗口 + 句边界优先”的策略：
+从当前起点 \texttt{start} 出发，先在 \texttt{[start, start + chunk\_size]} 范围内确定候选片段，
+再从后往前扫描句子结束符（中文的“。！？”、英文的 \verb!.!?! 以及换行符），
+若能在窗口内找到合适的句末位置，则优先在此处分割；若找不到，则退化为按定长切分。
+之后，新块的起点被设定为 \texttt{end - chunk\_overlap}，
+通过加入“如果没有前进至少 1 个字符则强制前进”的保护，避免在极端情况下出现死循环。
+
+这一策略在实践中取得了两方面收益：
+一是块长度在模型上下文限制之内，同时保留了足够的语义信息；
+二是块之间的重叠使得跨句甚至跨段的逻辑关联得以保留，从而提高了检索结果在回答生成中的可用性。
+
+此外，为了利用课件中的图片信息（如截图公式、流程图和板书），
+\texttt{DocumentLoader} 还实现了 \texttt{extract\_images\_from\_pdf} 和 \texttt{extract\_images\_from\_pptx}。
+这两个函数通过 \texttt{fitz} 与 PPTX 的图形接口枚举所有图片对象，
+利用最小边长阈值过滤掉图标和装饰性小图，将剩余图片保存到 \verb|images| 目录，
+然后调用 \texttt{pytesseract} 进行 OCR 识别。
+我们只保留字符数和词数均超过预设阈值的 OCR 文本，以降低噪声。
+最终，图片块也被封装为带有页码与图片 ID 的文档单元，与纯文本一同进入下游向量化流程。
 
 \subsection{向量数据库模块}
-向量存储与检索模块基于\texttt{ChromaDB}实现。
-\begin{itemize}
-    \item \textbf{Embedding}：调用OpenAI的\texttt{text-embedding-3-small}模型将文本块转化为高维向量。
-    \item \textbf{存储}：将文本向量及其元数据（文件名、页码、块ID）存入ChromaDB集合中。
-    \item \textbf{检索}：对于用户Query，同样生成向量，计算其与库中向量的余弦相似度，返回Top-K个最相关的文档片段。
-\end{itemize}
+向量数据库模块由 \texttt{VectorStore} 实现，其职责是将预处理后的文档块映射为向量表示，并支持基于语义相似度的检索。
+我们选择 Chroma 作为本地持久化向量库，一方面是因为其 Python 接口简洁，
+另一方面是其对元数据与 ID 管理的支持较好，便于后续做来源追踪。
+
+在 \texttt{add\_documents} 中，系统对每个文档块提取 \texttt{content} 字段，
+调用 \texttt{get\_embedding} 使用 OpenAI 提供的 Embedding 模型生成稠密向量。
+考虑到换行符可能干扰 embedding 质量，我们在请求前将文本中的换行统一替换为空格。
+每个块被分配一个唯一 ID：对于文本块使用“\verb|filename_p{page}_c{chunk}|”，
+对于图片块使用“\verb|filename_p{page}_img{image\_id}|”，
+对应的元数据中保留了文件名、文件路径、文件类型和页码等信息。
+所有向量、ID、文本与元数据最终批量写入 Chroma collection 中。
+
+为了提高检索的鲁棒性，我们在同一模块中实现了 BM25 稀疏检索。
+具体而言，\texttt{\_tokenize} 将文本转为简单的英语单词序列（对于中文可以扩展为更合理的分词方案），
+所有块的 token 列表被用于构建 \texttt{BM25Okapi} 模型。
+向量检索通过 \texttt{search} 完成，BM25 则由 \texttt{bm25\_search} 提供。
+在此基础上，我们实现了一个基于 Reciprocal Rank Fusion (RRF) 的混合检索接口 \texttt{hybrid\_search}：
+分别对稠密与稀疏检索结果按排名位置计算倒数得分，并对相同文档 ID 做加和排序。
+尽管当前在线 RAG Agent 主要使用向量检索，但该混合策略在实验中针对短问句与术语查询表现出更好的稳定性，为后续进一步集成打下了基础。
+
+\texttt{process\_data.py} 将上述流程串联起来：
+检查数据目录存在性，调用 \texttt{DocumentLoader.load\_all\_documents} 递归加载所有支持格式的文件，
+将得到的文档列表送入 \texttt{TextSplitter.split\_documents} 完成二次切分，
+最后通过 \texttt{VectorStore.add\_documents} 完成整体向量索引构建。
+在每次运行前，系统会清空现有 collection，以便在课程资料更新后重新构建。
 
 \subsection{RAG智能体 (RAG Agent)}
-\texttt{RAGAgent}是系统的核心大脑，主要负责：
-\begin{enumerate}
-    \item \textbf{检索上下文}：调用向量数据库接口获取相关资料。
-    \item \textbf{构建Prompt}：设计了专门的System Prompt，确立助教“专业、友好、苏格拉底式引导”的人设。在User Prompt中，将检索到的上下文片段以“---课程资料---”的形式注入，并要求模型基于资料回答，若资料不足则明确告知。
-    \item \textbf{生成回答}：调用GPT-4o-mini（或同类模型）生成最终回复，并附带来源标注（如“来源：lecture1.pdf 第5页”）。
-\end{enumerate}
+在线对话逻辑由 \texttt{RAGAgent} 统一管理。
+该类封装了与 LLM 的交互方式、检索策略以及对话级别的状态维护。
+
+首先，我们通过 \texttt{system\_prompt} 明确约束模型的“人格”和行为边界：
+系统被设定为一名课程助教，需要在回答时尽量引用知识库中提供的课程资料，并在答案中说明信息来源（包括文档名与页码）；
+对于不同类型的问题（概念问答、作业/练习题、代码与实践问题），助教应采用不同策略，
+其中作业题要侧重思路和方法提示，而避免直接给出完整解答；
+在交流风格上，则要求其使用中文、保持专业且友好，并适当使用苏格拉底式提问引导学生思考。
+
+在具体问答流程中，\texttt{answer\_question} 首先将用户输入与对话历史传入 \texttt{analyze\_intent}。
+我们使用一个轻量模型根据最近几轮对话分析当前问题的意图，
+输出诸如 \texttt{NEW\_TOPIC}、\texttt{DRILL\_DOWN}、\texttt{TOPIC\_SHIFT}、
+\texttt{CLARIFICATION}、\texttt{SUMMARIZATION} 或 \texttt{CHIT\_CHAT} 等类别，
+以及一个经过消歧与补全指代的 \texttt{rewritten\_query}。
+意图分析的目的有二：一是将“这个”“它”等指代词还原为具体概念，从而提升检索准确性；
+二是为后续的上下文窗口管理提供依据。
+
+\texttt{RAGAgent} 维护了一个有限长度的上下文窗口 \texttt{context\_window}，该列表以最新检索到的文档片段为主，
+当意图为 \texttt{NEW\_TOPIC} 或强烈纠正类时，窗口会被部分或全部重置；
+当意图为 \texttt{DRILL\_DOWN} 或 \texttt{TOPIC\_SHIFT} 时，
+则在原有窗口基础上追加新检索结果，并通过简单策略控制窗口长度与去重。
+这样一来，系统在多轮对话中既能保持主题连续，又能避免无休止地扩大上下文开销。
+
+在检索阶段，\texttt{retrieve\_context} 调用 \texttt{VectorStore} 根据重写后的查询获取若干文档片段，
+并通过 \texttt{\_format\_context} 将它们拼接为适合填入 Prompt 的结构化文本，
+其中显式包含文件名与页码，便于模型在回答中进行引用。
+最终，\texttt{generate\_response} 将系统提示词、若干轮对话历史（可选）
+以及格式化后的“课程资料 + 学生问题”作为消息列表，调用 OpenAI Chat Completion 模型生成答案。
+对于需要流式输出的场景，接口也预留了增量返回机制，以适配 Web 前端的实时对话体验。
 
 \subsection{功能扩展}
-除了基础问答，我们还实现了以下扩展功能：
-\begin{itemize}
-    \item \textbf{自动习题生成}：设计了特定的Prompt，要求模型根据检索到的考点，输出JSON格式的习题（包含题干、选项、答案、解析），支持选择题和简答题。
-    \item \textbf{复习提纲生成}：实现了递归生成的Prompt策略，能够为指定主题或全课程生成层级化的复习大纲，并在前端以树形结构展示。
-    \item \textbf{Web交互界面}：前端采用Next.js + Tailwind CSS，后端使用FastAPI，实现了类似ChatGPT的流式对话体验，以及专门的习题和提纲展示页面。
-\end{itemize}
+在上述基础问答功能之外，我们还实现了若干与教学场景高度相关的扩展功能。
+
+首先，在自动习题生成方面，系统提供了 \texttt{generate\_quiz} 接口。
+用户指定主题（如“注意力机制”）、难度等级和题型（选择题或简答题），
+系统会通过 \texttt{\_expand\_query} 使用小模型将该主题扩展为
+若干更具体的检索关键词（例如加入“定义”“优点”“典型公式”等），
+然后利用向量库检索覆盖面更广的上下文。
+随后，我们为每一道题构造一个专用的 Prompt，要求模型在给定资料范围内生成高质量题目，
+并严格按照预先约定的 JSON 格式输出题干、选项、参考答案、解析与来源信息。
+题目的生成过程使用多线程并行，以加速在前端一次性展示多题的体验。
+
+其次，在复习提纲方面，\texttt{generate\_outline} 支持针对“全课程”或任意子主题生成分层的 Markdown 提纲。
+与习题生成类似，我们先通过查询扩展与检索获取与主题高度相关的多个文档片段，
+再通过一个强调“层级结构、逻辑清晰与重点突出”的系统提示词，
+引导模型产出使用 \#、\#\#、\#\#\# 标记的结构化内容。
+前端可以基于这些 Markdown 自动渲染出树形知识结构，帮助学生从宏观上把握课程体系。
+
+最后，为了降低使用门槛，我们基于 React（Next.js）+ Tailwind CSS 实现了简单的 Web 前端，
+并用 FastAPI 封装后端接口，实现了三类入口：
+对话式课程助教、自动习题生成与复习提纲浏览。
+对话界面采用类 ChatGPT 的流式输出方式；
+习题与提纲页面则以卡片与树视图的形式展示模型输出，并保留了对应的来源信息。
+
 
 \section{实验与结果展示}
 
@@ -150,8 +234,10 @@
 
 \textbf{局限性与展望：}
 \begin{itemize}
-    \item 当前主要处理文本信息，对于课件中的图表、公式（尤其是图片格式的公式）理解能力有限。未来可引入多模态大模型（如GPT-4o）增强对非文本内容的解析。
-    \item 检索策略目前主要依赖语义相似度，对于关键词匹配要求高的场景可能不够精确。未来可尝试混合检索（Hybrid Search）策略，结合BM25算法。
+    \item \textbf{多模态理解有限。} 虽然我们通过 OCR 将部分重要图片转化为文本进入知识库，但对于包含复杂公式、图表或混合排版的课件，OCR 易引入噪声，且丢失布局信息。未来可以考虑引入更强的多模态模型（如具备文档理解能力的视觉语言模型），直接处理 PDF 或截图，以提升对图像信息的利用率。
+    \item \textbf{检索与生成尚未深度联动。} 目前生成模型主要依赖检索到的静态上下文，对于检索结果的再筛选与聚合仍较为粗糙。后续可以考虑引入基于重排序模型的二次筛选，或在生成过程中动态查询（例如基于 Tool-Calling 的 RAG），以减少无关上下文的干扰。
+    \item \textbf{自动评测缺乏。} 本项目主要通过案例分析来评估问答质量和习题/提纲实用性，缺乏统一的量化评测指标。未来可以构建一小规模的“标准问答对”与“目标提纲”，通过 BLEU、ROUGE 或人工打分等方式更系统地比较不同检索/Prompt 策略。
+    \item \textbf{部署与成本。} 当前系统依赖云端 LLM 与 Embedding 服务，在大量并发访问或大规模习题生成场景下成本较高。可以考虑引入本地开源模型（如量化后的 LLM 与向量模型），或对索引与缓存策略进行优化，以在性能与成本之间取得更好平衡。
 \end{itemize}
 
 \section{成员分工}
