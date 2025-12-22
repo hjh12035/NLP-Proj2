@@ -76,7 +76,7 @@ class VectorStore:
             return response.data[0].embedding
         except Exception as e:
             print(f"获取Embedding失败: {e}")
-            return []
+            raise e
 
     def add_documents(self, chunks: List[Dict[str, str]]) -> None:
         """添加文档块到向量数据库
