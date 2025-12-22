@@ -429,8 +429,6 @@ class RAGAgent:
 
         print(f"[Debug] 意图: {intent}, 重写查询: {rewritten_query}")
 
-        print(f"\n[调试] 检索到的上下文:\n{context}\n")
-        
         # 2. 根据意图决定是否检索
         if intent != "CHIT_CHAT":
             # 使用重写后的查询进行检索
@@ -444,6 +442,8 @@ class RAGAgent:
             context = self._format_context(self.context_window)
         else:
             context = "（未检索到特别相关的课程材料）"
+
+        print(f"\n[调试] 检索到的上下文:\n{context}\n")
 
         # 5. 生成回答 (使用大模型)
         response = self.generate_response(
