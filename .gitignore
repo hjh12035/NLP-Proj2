@@ -65,6 +65,7 @@ data_colletion/
 *.bin
 embeddings/
 models/
+report/image/*.png
 
 # Misc
 *.pyc

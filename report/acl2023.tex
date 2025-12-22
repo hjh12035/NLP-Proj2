@@ -18,6 +18,7 @@
     breaklines=true
 }
 \newcommand{\code}[1]{\lstinline!#1!}
+\usepackage{graphicx}
 % \usepackage[UTF8]{ctex}
 
 \usepackage{amsmath}
@@ -136,6 +137,13 @@ DocumentLoader 还实现了 \code{extract_images_from_pdf} 和 \code{extract_ima
 然后调用 \code{pytesseract} 进行 OCR 识别。
 我们只保留字符数和词数均超过预设阈值的 OCR 文本，以降低噪声。
 最终，图片块也被封装为带有页码与图片 ID 的文档单元，与纯文本一同进入下游向量化流程。
+Figure \ref{fig:ocr_example} 展示了检索到的图片信息是如何被模型利用的。
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=\linewidth]{image/ocr_example.png}
+    \caption{OCR 图片内容在回答生成中的引用示例}
+    \label{fig:ocr_example}
+\end{figure}
 
 \subsection{向量数据库模块}
 向量数据库模块由 VectorStore 实现，其职责是将预处理后的文档块映射为向量表示，并支持基于语义相似度的检索。
