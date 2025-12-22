@@ -11,6 +11,7 @@
 % Standard package includes
 \usepackage{times}
 \usepackage{latexsym}
+\usepackage{graphicx}
 \usepackage{listings}
 \lstset{
     basicstyle=\ttfamily,
@@ -212,6 +213,9 @@ DocumentLoader 还实现了 \code{extract_images_from_pdf} 和 \code{extract_ima
 再通过一个强调“层级结构、逻辑清晰与重点突出”的系统提示词，
 引导模型产出使用 \#、\#\#、\#\#\# 标记的结构化内容。
 前端可以基于这些 Markdown 自动渲染出树形知识结构，帮助学生从宏观上把握课程体系。
+值得一提的是，为了优化用户体验，我们在提纲生成环节采用了流式响应技术，
+后端实时推送生成的 Markdown 字符，前端利用 ReactMarkdown 组件即时渲染，
+大幅降低了长文本生成的首字等待时间，避免了用户在生成复杂提纲时的枯燥等待。
 
 最后，为了降低使用门槛，我们基于 React（Next.js）+ Tailwind CSS 实现了简单的 Web 前端，
 并用 FastAPI 封装后端接口，实现了三类入口：
@@ -222,24 +226,86 @@ DocumentLoader 还实现了 \code{extract_images_from_pdf} 和 \code{extract_ima
 
 \section{实验与结果展示}
 
-为了验证系统的有效性，我们使用了[课程名称，如NLP]课程的课件作为知识库进行了测试。
+为了验证系统的有效性，我们使用了“自然语言处理”课程的课件作为知识库进行了测试。
 
-\subsection{基础问答测试}
-\textbf{问题1：} [请在此处填入一个测试问题，例如：什么是Transformer？] \\
-\textbf{系统回答：} [请在此处填入系统的实际回答] \\
-\textbf{分析：} [请简要分析回答是否准确，是否引用了正确的文档]
+完整的问答、习题和提纲参见附录。
 
-\textbf{问题2：} [请在此处填入另一个测试问题] \\
-\textbf{系统回答：} [请在此处填入系统的实际回答] \\
-\textbf{分析：} ...
+\subsection{问答测试}
+\textbf{问题1a：} 请简述Transformer模型中的“自注意力机制” \\
+\textbf{系统回答：} 如 Figure \ref{fig:1a_example} 所示
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=\linewidth]{./image/1a.png}
+    \caption{问题1a的系统回答示例}
+    \label{fig:1a_example}
+\end{figure}
+
+\textbf{分析：} 系统准确描述了自注意力机制的基本原理，准确引用了课件中的相关内容，并提供了页码作为参考，回答符合预期。
+
+\textbf{问题1b(承接问题1a)：} 深入讲解你提到的第三点 \\
+\textbf{系统回答：} 如 Figure \ref{fig:1b_example} 所示
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=\linewidth]{./image/1b.png}
+    \caption{问题1b的系统回答示例}
+    \label{fig:1b_example}
+\end{figure}
+
+\textbf{分析：} 系统成功识别了“第三点”指代的内容，并在上下文中进行了有效的补全，展示了良好的多轮对话理解能力。
+
+\textbf{问题2：} 我需要用 PyTorch 实现一个简单的词嵌入层，但不知道 embedding\_dim 参数该怎么设，能直接给我一段完整的训练代码吗？ \\
+\textbf{系统回答：} 如 Figure \ref{fig:2_example} 所示
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=\linewidth]{./image/2a.png}
+    \includegraphics[width=\linewidth]{./image/2b.png}
+    \caption{问题2的系统回答示例}
+    \label{fig:2_example}
+
+\end{figure}
+
+\textbf{分析：} 系统正确理解了用户的需求，提供了一个完整的 PyTorch 词嵌入层实现代码片段，并解释了 embedding\_dim 参数的选择依据，回答内容专业且实用。对于直接给出完整代码的请求，系统给出了最小可运行框架，它的回复专业，同时也符合学术诚信要求。
+
+\textbf{问题3：} 请介绍一下量子计算在自然语言处理中的最新应用 \\
+\textbf{系统回答：} 如 Figure \ref{fig:3_example} 所示
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=\linewidth]{./image/3.png}
+    \caption{问题3的系统回答示例}
+    \label{fig:3_example}
+\end{figure}
+\textbf{分析：} 系统明确指出当前知识库中没有相关内容，避免了生成不准确或虚假的信息，体现了良好的信息来源追踪能力，说明RAG机制有效缓解了幻觉问题。
 
 \subsection{习题生成测试}
-\textbf{输入主题：} [例如：注意力机制] \\
-\textbf{生成结果：} [请截图或复制生成的题目]
+\textbf{输入：} n-gram 选择题 困难 2道 \\
+\textbf{生成结果：} 如 Figure \ref{fig:quiz_example} 所示
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=\linewidth]{./image/T1.png}
+    \includegraphics[width=\linewidth]{./image/T2.png}
+    \caption{习题生成示例}
+    \label{fig:quiz_example}
+\end{figure}
+
+\textbf{分析：} 生成的两道选择题均围绕 n-gram 的定义与应用展开，题目难度符合要求，选项设计合理，参考答案与解析准确，且均附带了明确的来源标注。
 
 \subsection{复习提纲测试}
-\textbf{输入主题：} [例如：全课程] \\
-\textbf{生成结果：} [请截图或复制生成的提纲结构]
+\textbf{输入主题：} 统计语言模型 \\
+\textbf{生成结果：} 如 Figure \ref{fig:outline_example} 所示
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=\linewidth]{./image/outline.png}
+    \caption{复习提纲生成示例}
+    \label{fig:outline_example}
+\end{figure}
+\textbf{分析：} 提纲结构清晰，涵盖了统计语言模型的主要内容，符合预期。
+
+
 
 \section{总结与讨论}
 
@@ -270,7 +336,8 @@ RAG 智能体则在此基础上实现了意图分析、对话级上下文维护�
 \section{成员分工}
 
 \begin{itemize}
-    \item 胡健豪：
+    \item 胡健豪：负责后端基础文档处理模块，意图分析、问题重写机制的设计与实现，后端习题与提纲生成功能的开发，
+    前端Web界面搭建与API对接，与报告撰写。
     \item 姚明哲：负责后端信息检索增强和多模态识别的设计与实现，
     包括文档处理模块与向量数据库搭建，Prompt设计与优化，系统集成与测试，
     以及实验报告的撰写。
@@ -281,6 +348,20 @@ RAG 智能体则在此基础上实现了意图分析、对话级上下文维护�
 
 % \bibliography{anthology,custom}
 % \bibliographystyle{acl_natbib}
+
+
+% \appendix
+
+% \section{问题1完整交互记录}
+% \label{app:prompt_outputs}
+
+% \textbf{Prompt:} 请简述Transformer模型中的“自注意力机制”
+
+% \begin{center}
+% \fcolorbox{black}{gray!10}{\parbox{.9\linewidth}{
+
+% }}
+% \end{center}
 
 \end{CJK}
 \end{document}
