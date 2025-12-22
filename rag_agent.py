@@ -429,6 +429,8 @@ class RAGAgent:
 
         print(f"[Debug] 意图: {intent}, 重写查询: {rewritten_query}")
 
+        print(f"\n[调试] 检索到的上下文:\n{context}\n")
+        
         # 2. 根据意图决定是否检索
         if intent != "CHIT_CHAT":
             # 使用重写后的查询进行检索
