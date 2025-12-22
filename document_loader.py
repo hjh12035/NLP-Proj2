@@ -13,6 +13,8 @@ from config import DATA_DIR
 
 class DocumentLoader:
     MIN_IMAGE_SIDE = 512  # 最小图片边长，单位像素
+    MIN_OCR_CHAR_COUNT = 64
+    MIN_OCR_WORD_COUNT = 16
 
     @staticmethod
     def _is_small_bitmap(width: Optional[int], height: Optional[int]) -> bool:
@@ -22,6 +24,14 @@ class DocumentLoader:
             width < DocumentLoader.MIN_IMAGE_SIDE
             or height < DocumentLoader.MIN_IMAGE_SIDE
         )
+
+    @staticmethod
+    def _is_valid_ocr_text(text: str) -> bool:
+        text = text.strip()
+        if len(text) < DocumentLoader.MIN_OCR_CHAR_COUNT:
+            return False
+        tokens = [tok for tok in text.replace("\n", " ").split() if tok]
+        return len(tokens) >= DocumentLoader.MIN_OCR_WORD_COUNT
     
     def __init__(
         self,
@@ -110,7 +120,10 @@ class DocumentLoader:
         """对图片进行OCR识别，返回文本"""
         try:
             text = pytesseract.image_to_string(Image.open(image_path), lang="chi_sim+eng")
-            return text.strip()
+            if self._is_valid_ocr_text(text):
+                return text.strip()
+            else:
+                return ""
         except Exception as e:
             print(f"OCR识别失败: {image_path}, 错误: {e}")
             return ""
@@ -153,7 +166,7 @@ class DocumentLoader:
                 ocr_text = self.ocr_image(image_path)
                 if not ocr_text:
                     continue
-                text = f"--- 第 {page_idx + 1} 页 ---\n[图片OCR内容]\n{ocr_text}\n"
+                text = f"--- 第 {page_idx + 1} 页 ---\n[图片内容]\n{ocr_text}\n"
                 images.append(
                     {
                         "filepath": image_path,
@@ -200,7 +213,7 @@ class DocumentLoader:
                     ocr_text = self.ocr_image(image_path)
                     if not ocr_text:
                         continue
-                    text = f"--- 幻灯片 {slide_idx + 1} ---\n[图片OCR内容]\n{ocr_text}\n"
+                    text = f"--- 幻灯片 {slide_idx + 1} ---\n[图片内容]\n{ocr_text}\n"
 
                     images.append(
                         {
