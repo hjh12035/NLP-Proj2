@@ -3,7 +3,7 @@
     "OPENAI_API_BASE": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "MODEL_NAME": "qwen3-max",
     "FAST_MODEL_NAME": "qwen-flash",
-    "OPENAI_EMBEDDING_MODEL": "text-embedding-v2",
+    "OPENAI_EMBEDDING_MODEL": "text-embedding-v3",
     "DATA_DIR": "./data",
     "VECTOR_DB_PATH": "./vector_db",
     "COLLECTION_NAME": "nlp_course_rag",

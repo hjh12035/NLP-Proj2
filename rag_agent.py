@@ -60,7 +60,7 @@ class RAGAgent:
 
     def _expand_query(self, topic: str, task_type: str) -> str:
         """
-        使用小模型扩展查询，以获得更好的检索结果
+        先用小模型扩展查询内容，以获得更好的检索结果
         task_type: "quiz" 或 "outline"
         """
         if not topic:
@@ -88,7 +88,7 @@ class RAGAgent:
             response = self.client.chat.completions.create(
                 model=self.fast_model,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
+                temperature=0.3, # 温度低来保证稳定输出
             )
             expanded_query = response.choices[0].message.content.strip()
             print(f"[Debug] 原始主题: {topic}, 扩展查询: {expanded_query}")
@@ -102,7 +102,7 @@ class RAGAgent:
         使用小模型分析用户意图并重写查询
         返回格式: {"intent": "...", "rewritten_query": "..."}
         """
-        # 如果没有历史记录，直接视为新话题，无需重写
+        # 如果没有历史记录，直接视为新话题，不需要重写
         if not chat_history:
             return {"intent": "NEW_TOPIC", "rewritten_query": query}
 
@@ -159,7 +159,7 @@ class RAGAgent:
             # 替换策略：清空旧的，放入新的（或者更复杂的替换逻辑）
             self.context_window = new_docs
         elif intent in ["DRILL_DOWN", "TOPIC_SHIFT", "SUMMARIZATION"]:
-            # 追加策略：去重后追加
+            # 追加策略：去重后追加内容
             existing_ids = {
                 f"{d['metadata'].get('filename')}_{d['metadata'].get('page_number')}_{d.get('content')[:20]}"
                 for d in self.context_window
@@ -174,12 +174,12 @@ class RAGAgent:
             if len(self.context_window) > self.max_window_size:
                 self.context_window = self.context_window[-self.max_window_size :]
 
-        # CHIT_CHAT 不更新窗口
+        # CHIT_CHAT 不需要更新窗口
 
     def retrieve_context(
         self, query: str, top_k: int = TOP_K
     ) -> Tuple[str, List[Dict]]:
-        """检索相关上下文 (基础方法，供内部调用)"""
+        """检索相关上下文"""
         retrieved_docs = self.vector_store.search(query, top_k=top_k)
         if not retrieved_docs:
             return "", []
@@ -447,6 +447,7 @@ class RAGAgent:
             context = "（未检索到特别相关的课程材料）"
         
         print(f"\n[调试] 检索到的上下文:\n{context}\n")
+
 
         # 5. 生成回答 (使用大模型)
         response = self.generate_response(
