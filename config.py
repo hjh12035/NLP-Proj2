@@ -3,7 +3,7 @@ import json
 
 # 默认配置
 DEFAULT_CONFIG = {
-    "OPENAI_API_KEY": "sk-fb4a196bdd0a4f3ca90971f9ecd90ee9",
+    "OPENAI_API_KEY": "your-api-key",
     "OPENAI_API_BASE": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "MODEL_NAME": "qwen3-max",
     "FAST_MODEL_NAME": "qwen-flash",
